@@ -1,6 +1,15 @@
 module GlobalAnalysis
 
-# Write your package code here.
-# test
+include("TypeDefinitions.jl")
+include("DataImport.jl")
 
-end
+#using .TypeDefinitions
+using .DataImport
+
+directory = raw"C:\Box Sync\Data\fs-TAS\Matlab data\Fe2O3\400exc\test"
+
+Data = importData(directory)
+
+Data = combineData(Data)
+
+end #module
