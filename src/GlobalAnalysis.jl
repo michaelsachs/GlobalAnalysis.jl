@@ -1,6 +1,6 @@
 module GlobalAnalysis
 
-export importData
+export importData, defineIRFTime, convolveIRF
 
 include("TypeDefinitions.jl")
 include("DataImport.jl")
