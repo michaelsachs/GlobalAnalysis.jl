@@ -4,6 +4,7 @@ export importData, defineIRFTime, convolveIRF
 
 include("TypeDefinitions.jl")
 include("DataImport.jl")
+include("IRFConvolution.jl")
 
 directory = raw"C:\Box Sync\Data\fs-TAS\Matlab data\Fe2O3\400exc\test"
 
