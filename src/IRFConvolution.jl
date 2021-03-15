@@ -26,7 +26,7 @@ TimePos = Time[Time .> 0]
 simKin = exp.(-0.1 .* TimePos)
 =#
 
-function defineIRFTime(Time, μ)
+function defineIRFTime(Time, μ, σ)
     TimeDiff = diff(Time)
     #Time = Time .+ μ
     # check if time points are evenly spaced; all(x,itr) can short circuit, 
