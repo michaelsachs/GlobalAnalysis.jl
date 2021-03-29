@@ -42,7 +42,7 @@ function determineItpVector(XPar, XParItpBoolAr)
     XParUnique = []
     XParUniqueNum = []
     for nn in 1:length(XPar)
-
+        # parts which need to be interpolated
         XParItp = XPar[nn][XParItpBoolAr[nn]]
         # check if vector is already part of XParUnique
         XParItpBool = XParUnique .== [XPar[nn]]
@@ -55,7 +55,13 @@ function determineItpVector(XPar, XParItpBoolAr)
             push!(XParUniqueNum, length(XParItp))
         end
     end
-    XParCommon = XParUnique[sortperm(XParUniqueNum)][end]
+    # in case of no overlap
+    if XParUnique == []
+        XParCommon = sort(vcat(XPar...))
+    # in case of overlap
+    else
+        XParCommon = XParUnique[sortperm(XParUniqueNum)][end]
+    end
 end
 
 # returns bool of length A to identify position of a in A
@@ -217,7 +223,7 @@ function importData(directory)
             XParOverlapBoolAr = dataOverlap(XPar)
             YParOverlapBoolAr = dataOverlap(YPar)
 
-            #vectors to interpolate onto ####combine both functions 
+            #vectors to interpolate onto ####combine both X and Y functions 
             XParCommon = determineItpVector(XPar, XParOverlapBoolAr)
             YParCommon = determineItpVector(YPar, YParOverlapBoolAr)
             #####temp
@@ -256,9 +262,19 @@ function importData(directory)
             ZParYInterpolated = []
             ZParXYInterpolated = []
             for kk in 1:length(XPar) #####no overlap case?? Xparnan empty. check zparall (should be appended)
-                XParNaN = coalesce.(XPar[kk][XParOverlapBoolAr[kk]], NaN) #chnage way these emtpy ones are stored?
-                YParNaN = coalesce.(YPar[kk][YParOverlapBoolAr[kk]], NaN)
-                ZParNaN = coalesce.(ZPar[kk][XParOverlapBoolAr[kk],YParOverlapBoolAr[kk]], NaN)
+                # negate bool for no overlap, i.e. just use original vector 
+                XParOverlapBool = XParOverlapBoolAr[kk]
+                if sum(XParOverlapBool) == 0
+                    XParOverlapBool = .!XParOverlapBool
+                end
+                YParOverlapBool = YParOverlapBoolAr[kk]
+                if sum(YParOverlapBool) == 0
+                    YParOverlapBool = .!YParOverlapBool
+                end
+
+                XParNaN = coalesce.(XPar[kk][XParOverlapBool], NaN) #chnage way these emtpy ones are stored?
+                YParNaN = coalesce.(YPar[kk][YParOverlapBool], NaN)
+                ZParNaN = coalesce.(ZPar[kk][XParOverlapBool,YParOverlapBool], NaN)
                 XParCommonNaN = coalesce.(XParCommon[XParCommonBoolAr[kk]],NaN) 
                 #emty means there are no common ones; all should be appended later
 
@@ -287,6 +303,7 @@ function importData(directory)
 
             # interpolation onto YParCommon. Note that missing is not currently supported by Interpolations, therefore missings are 
             # for now converted to NaN and then back to missing after interpolation 
+            ##might not account for non overlapping y => check
             ZParXInterpolated = []
             ZParYInterpolated = []
             ZParXYInterpolated = []
