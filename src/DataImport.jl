@@ -38,30 +38,32 @@ end
 # determine vector to interpolate other datasets onto 
 # returns vector with highest number of occurences along dim
 # take into account spacing??
-function determineItpVector(XPar, XParItpBoolAr)
+function determineItpVector(XPar, XParOverlapBoolAr)
     XParUnique = []
     XParUniqueNum = []
     for nn in 1:length(XPar)
         # parts which need to be interpolated
-        XParItp = XPar[nn][XParItpBoolAr[nn]]
+        XParOverlap = XPar[nn][XParOverlapBoolAr[nn]]
         # check if vector is already part of XParUnique
-        XParItpBool = XParUnique .== [XPar[nn]]
-        if XParItp == []
+        XParOverlapBool = XParUnique .== [XPar[nn]]
+        if XParOverlap == []
+            # no contribution to itp vector if no overlap
             continue
-        elseif any(x->x==true, XParItpBool) == true
-            XParUniqueNum[XParItpBool] .+= length(XParItp)
+        elseif any(x->x==true, XParOverlapBool) == true
+            XParUniqueNum[XParOverlapBool] .+= length(XParOverlap)
         else
-            push!(XParUnique, XParItp)
-            push!(XParUniqueNum, length(XParItp))
+            push!(XParUnique, XParOverlap)
+            push!(XParUniqueNum, length(XParOverlap))
         end
     end
-    # in case of no overlap
+    # in case of no overlap between any XPar vectors (to prevent error)
     if XParUnique == []
-        XParCommon = sort(vcat(XPar...))
+        XParCommon = []
     # in case of overlap
     else
         XParCommon = XParUnique[sortperm(XParUniqueNum)][end]
     end
+    return XParCommon
 end
 
 # returns bool of length A to identify position of a in A
@@ -221,41 +223,59 @@ function importData(directory)
         if (all(x->x==XPar[1], XPar) == false) | (all(y->y==YPar[1], YPar) == false)
             #bool arrays where true indicates that interpolation is needed
             XParOverlapBoolAr = dataOverlap(XPar)
-            YParOverlapBoolAr = dataOverlap(YPar)
+            YParOverlapBoolAr = dataOverlap(YPar) #at this point we know whether there is overlao
 
-            #vectors to interpolate onto ####combine both X and Y functions 
+            ### 1) VECTOR PARTS WHICH OVERLAP
+            # arrays with overlapping vector parts 
+            XParOverlapAr = [XPar[k][XParOverlapBoolAr[k]] for k in eachindex(XPar)]
+            YParOverlapAr = [YPar[k][YParOverlapBoolAr[k]] for k in eachindex(YPar)]
+            #XParNoOverlapAr = [XPar[k][.!XParOverlapBoolAr[k]] for k in eachindex(XPar)]
+
+            # determine vectors to interpolate onto, containing e.g. common values among all 
+            # XPar vectors. Note ParCommon is a single vector ####combine both X and Y functions 
+            # returned vectors only contain overlapping parts
+            # ok if there is at least some overlap, but what if no overlap in e.g. X at all?
             XParCommon = determineItpVector(XPar, XParOverlapBoolAr)
             YParCommon = determineItpVector(YPar, YParOverlapBoolAr)
-            #####temp
-            #XParCommon = [XParCommon; collect(1000:10:1100)]
-            #YParCommon = [YParCommon; collect(6000:1000:7000)]
 
-
-            
             # allows for common itp vectors to contain arbitrary elements without being bound to array dimensions (future)
+            # assumes Par vectors are contained in ParCommon in contiguous manner
             #could be condensed into function....
             #need to add equal sign to one of the 2
-            XParItpBoolAr = []
-            YParItpBoolAr = []
-            XParCommonBoolAr = []
+            #XParItpBoolAr = []#[trues(length(XPar[1])), trues(length(XPar[2]))]#[]
+            #YParItpBoolAr = []
+            XParCommonBoolAr = []#[trues(length(XPar[1])), trues(length(XPar[2]))]#[]
             YParCommonBoolAr = []
             for bb in 1:length(XPar)
                 #interpolate if overlap with other datasets OR within common itp dimensions, BUT only within dimensions of
                 #current param dataset
-                XParItpBool = (XPar[bb] .> XParCommon[1]) .& (XPar[bb] .< XParCommon[end]) .| XParOverlapBoolAr[bb] ###emprty
-                YParItpBool = (YPar[bb] .> YParCommon[1]) .& (YPar[bb] .< YParCommon[end]) .| YParOverlapBoolAr[bb]
-                push!(XParItpBoolAr, XParItpBool)
-                push!(YParItpBoolAr, YParItpBool)
+                #XParItpBool = (XPar[bb] .> XParCommon[1]) .& (XPar[bb] .< XParCommon[end]) .| XParOverlapBoolAr[bb] ###emprty
+                #YParItpBool = (YPar[bb] .> YParCommon[1]) .& (YPar[bb] .< YParCommon[end]) .| YParOverlapBoolAr[bb]
+                #push!(XParItpBoolAr, XParItpBool)
+                #push!(YParItpBoolAr, YParItpBool)
 
-                XParCommonBool = (XParCommon .> XPar[bb][1]) .& (XParCommon .< XPar[bb][end]) ###empty
-                YParCommonBool = (YParCommon .> YPar[bb][1]) .& (YParCommon .< YPar[bb][end]) 
+                if XParOverlapAr[bb] == []
+                    # if no overlap for current element use original vector for interpolation
+                    # for now this case does not matter as is not used in next loop 
+                    XParCommonBool = []#trues(length(XPar[bb]))
+                else
+                    XParCommonBool = (XParCommon .> XPar[bb][1]) .& (XParCommon .< XPar[bb][end])
+                end
                 push!(XParCommonBoolAr, XParCommonBool)
+
+                if YParOverlapAr[bb] == []
+                    # if no overlap for current element use original vector for interpolation
+                    # for now this case does not matter as is not used in next loop  
+                    YParCommonBool = []#trues(length(YPar[bb]))
+                else
+                    YParCommonBool = (YParCommon .> YPar[bb][1]) .& (YParCommon .< YPar[bb][end]) 
+                end
                 push!(YParCommonBoolAr, YParCommonBool)
             end
 
             #if empty: make overlap all full and commonBool all empty
 
-            
+            #=
             # interpolation onto YParCommon. Note that missing is not currently supported by Interpolations, therefore missings are 
             # for now converted to NaN and then back to missing after interpolation 
             ZParXInterpolated = []
@@ -299,7 +319,7 @@ function importData(directory)
             end
 
             itpXYPar = interpolate((XParNaN,YParNaN,), ZParNaN, Gridded(Linear()))
-
+            =#
 
             # interpolation onto YParCommon. Note that missing is not currently supported by Interpolations, therefore missings are 
             # for now converted to NaN and then back to missing after interpolation 
@@ -308,12 +328,28 @@ function importData(directory)
             ZParYInterpolated = []
             ZParXYInterpolated = []
             for kk in 1:length(XPar)
-                XParNaN = coalesce.(XPar[kk], NaN)
-                YParNaN = coalesce.(YPar[kk], NaN)
+                XParNaN = coalesce.(XPar[kk], NaN) #coalesce.(XPar[kk][XParOverlapBoolAr[kk]], NaN)
+                YParNaN = coalesce.(YPar[kk], NaN) #coalesce.(YPar[kk][YParOverlapBoolAr[kk]], NaN)
                 ZParNaN = coalesce.(ZPar[kk], NaN)
-                XParCommonNaN = coalesce.(XParCommon[XParCommonBoolAr[kk]],NaN)
-                YParCommonNaN = coalesce.(YParCommon[YParCommonBoolAr[kk]],NaN)
-                #itpYPar = interpolate((XPar[kk],YPar[kk],), ZPar[kk], Gridded(Linear()))
+
+                # set up X vector to interpolate onto 
+                if XParOverlapAr[kk] == []
+                    # if no overlap for current element use original vector for interpolation  
+                    XParCommonNaN = coalesce.(XPar[kk],NaN)
+                else
+                    # otherwise use itp target vector 
+                    XParCommonNaN = coalesce.(XParCommon[XParCommonBoolAr[kk]],NaN)
+                end
+
+                # set up Y vector to interpolate onto 
+                if YParOverlapAr[kk] == []
+                    # if no overlap for current element use original vector for interpolation 
+                    YParCommonNaN = coalesce.(YPar[kk],NaN)
+                else
+                    # otherwise use itp target vector 
+                    YParCommonNaN = coalesce.(YParCommon[YParCommonBoolAr[kk]],NaN)
+                end
+
                 #replace missing by NaN as long as it is not supported by Interpolations
                 itpXYPar = interpolate((XParNaN,YParNaN,), ZParNaN, Gridded(Linear()))
                 #extrapolate to NaN outside array dimensions. Replace by missing once supported
@@ -339,6 +375,8 @@ function importData(directory)
             YParNew = []
             ZParNew = []
             for kk in 1:length(XPar)
+                # assemble from interpolated and non-interpolated parts of array
+                # in case of no overap ParCommon = [] and gets accessed at [], which returns []
                 XParUnsorted = [XParCommon[XParCommonBoolAr[kk]]; XPar[kk][.!XParOverlapBoolAr[kk]]]
                 YParUnsorted = [YParCommon[YParCommonBoolAr[kk]]; YPar[kk][.!YParOverlapBoolAr[kk]]]
                 XParSortBool = sortperm(XParUnsorted)
@@ -361,6 +399,7 @@ function importData(directory)
             numZParAll = zeros(Union{Int64,Missing}, length(XParAll), length(YParAll))
 
             for öö in 1:length(XPar)
+                # ParNew are contiguous pieces of ParAll; return their indices
                 XParBool = findVec(XParAll,XParNew[öö])
                 YParBool = findVec(YParAll,YParNew[öö])
 
