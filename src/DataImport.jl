@@ -441,3 +441,38 @@ end
 
 #make X and Y non missings?
 
+
+
+# Import vectors from .csv files and assemble in matrix with common x dimension. Input format 
+# is .csv file containing indep variable x in first column, while each subsequent column contains  
+# data on dependent variable y. y vectors can be distributed over multiple files with this format 
+# in the same folder 
+function importDataVectors(directory, x)
+
+    files = glob("*.csv", directory)
+    fileNames = readdir(directory)
+    # remove elements which do not end in .csv
+    filter!(x->x[end-3:end]==".csv", fileNames)
+
+    # interpolate data vectors onto x; extrapolate to NaN if values are outside x dimensions,
+    # then remove rows which contain NaN in the final matrix 
+    Y = Array{Union{Float64,Missing}}(undef,length(x),0)
+    for nFile in eachindex(files)
+        DF = CSV.File(files[nFile]; datarow=2, type=Float64) |> DataFrame!
+        data = Matrix(DF)
+        # one y vector in file 
+        if size(data,2) == 2
+            itpData = interpolate((data[:,1],), data[:,2], Gridded(Linear()))
+            ietpData = extrapolate(itpData, NaN)
+            Y = hcat(Y, ietpData(x))
+        # two or more y vectors in file 
+        elseif size(data,2) ≥ 3
+            # arbitrary second dimension to make matrix interpolation work 
+            yitp = collect(1:size(data,2)-1)
+            itpData = interpolate((data[:,1],yitp), data[:,2:end], Gridded(Linear()))
+            ietpData = extrapolate(itpData, NaN)
+            Y = hcat(Y, ietpData(x, yitp))
+        end
+    end
+    return Y
+end 
