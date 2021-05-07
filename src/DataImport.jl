@@ -429,18 +429,16 @@ function importData(directory; miss="Missing")
             XParAll = coalesce.(XParAll, NaN)
             YParAll = coalesce.(YParAll, NaN)
             ZParAll = coalesce.(ZParAll, NaN)
-        end
-        
+            Data[nAllParam] = deepcopy(DataStruct{Float64}(String(paramUnique[nAllParam][1]), XParAll, YParAll, ZParAll, 
+                paramUnique[nAllParam][2], paramUnique[nAllParam][3], paramUnique[nAllParam][4], 
+                fileNames[paramBool]))
+        else
         #store combined data in new DataStruct
-        #if length(paramUnique[nAllParam][3]) == 1
-        #Data[nAllParam] = deepcopy(DataStruct(paramUnique[nAllParam][1], XParAll, YParAll, ZParAll, 
-        #    paramUnique[nAllParam][2], paramUnique[nAllParam][3], paramUnique[nAllParam][4], 
-        #    [fileNames[paramBool]]))
-        #else
-        Data[nAllParam] = deepcopy(DataStruct(String(paramUnique[nAllParam][1]), XParAll, YParAll, ZParAll, 
-            paramUnique[nAllParam][2], paramUnique[nAllParam][3], paramUnique[nAllParam][4], 
-            fileNames[paramBool]))
-        #end
+            Data[nAllParam] = deepcopy(DataStruct{Union{Float64,Missing}}(String(paramUnique[nAllParam][1]), XParAll, YParAll, ZParAll, 
+                paramUnique[nAllParam][2], paramUnique[nAllParam][3], paramUnique[nAllParam][4], 
+                fileNames[paramBool]))
+        end
+
 
     end
     return Data
@@ -499,8 +497,14 @@ function maskData(Data, maskLower, maskUpper; dim="x", maskVal=missing)
             replace!(mask, false=>1)
             zData = Data[k].z .* transpose(mask)
         end
-        DataM[k] = DataStruct(Data[k].name, Data[k].x, Data[k].y, zData, 
-            Data[k].var, Data[k].val, Data[k].unit, Data[k].file)
+
+        if maskVal == missing
+            DataM[k] = DataStruct{Union{Float64,Missing}}(Data[k].name, Data[k].x, Data[k].y, zData, 
+                Data[k].var, Data[k].val, Data[k].unit, Data[k].file)
+        else
+            DataM[k] = DataStruct{Float64}(Data[k].name, Data[k].x, Data[k].y, zData, 
+                Data[k].var, Data[k].val, Data[k].unit, Data[k].file)
+        end
     end 
     return DataM
 end 
