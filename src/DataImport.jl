@@ -432,11 +432,13 @@ function importData(directory; miss="Missing")
             Data[nAllParam] = deepcopy(DataStruct{Float64}(String(paramUnique[nAllParam][1]), XParAll, YParAll, ZParAll, 
                 paramUnique[nAllParam][2], paramUnique[nAllParam][3], paramUnique[nAllParam][4], 
                 fileNames[paramBool]))
-        else
+        elseif miss == "Missing"
         #store combined data in new DataStruct
             Data[nAllParam] = deepcopy(DataStruct{Union{Float64,Missing}}(String(paramUnique[nAllParam][1]), XParAll, YParAll, ZParAll, 
                 paramUnique[nAllParam][2], paramUnique[nAllParam][3], paramUnique[nAllParam][4], 
                 fileNames[paramBool]))
+        else
+            error("miss must be \"Missing\" or \"NaN\"")
         end
 
 
