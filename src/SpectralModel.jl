@@ -163,9 +163,9 @@ p2 = plot(yOffset[yBool], paramOpt[yBool,:],xscale=:log10,linewidth=1,xlabel="Ti
 
 # normalise fit kinetics and plot 
 paramOptNorm = paramOpt ./ mapslices(maximum, paramOpt, dims=1)
-p3 = plot(yOffset, paramOptNorm,xlabel="Time (ps)", xlim=(-1,1.5),
+p3 = plot(yOffset[yBool], paramOptNorm[yBool,:],xlabel="Time (ps)", #xlim=(-1,1.5),
     ylabel = "Normalised ΔA", title="Kinetics from spectral model", legend=false,
-    markerstrokewidth=0, markersize=3.5)
+    markerstrokewidth=0, markersize=3.5, xscale=:log10)
 
 plot(p1,p2,p3,layout=(3,1))
 plot!(titlefontsize=12, size=(500,800), leftmargin=6Plots.mm)

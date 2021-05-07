@@ -78,7 +78,7 @@ end
 
 # imports all .csv files in chosen directory
 # first column in csv is x data, first coumn is y data, [1,1] is not used, rest is z data
-function importData(directory)
+function importData(directory; miss="Missing")
     files = glob("*.csv", directory)
     fileNames = readdir(directory)
     # remove elements which do not end in .csv
@@ -423,6 +423,13 @@ function importData(directory)
             end
             ZParAll ./= length(XPar)
         end
+
+        #use NaN instead of Missing if desired 
+        if miss == "NaN"
+            XParAll = coalesce.(XParAll, NaN)
+            YParAll = coalesce.(YParAll, NaN)
+            ZParAll = coalesce.(ZParAll, NaN)
+        end
         
         #store combined data in new DataStruct
         #if length(paramUnique[nAllParam][3]) == 1
@@ -476,3 +483,25 @@ function importDataVectors(directory, x)
     end
     return Y
 end 
+
+
+function maskData(Data, maskLower, maskUpper; dim="x", maskVal=missing)
+    DataM = StructArray{DataStruct}(undef,length(Data))
+    for k in eachindex(Data)
+        if dim == "x"
+            bool = maskLower .≤ Data[k].x .≤ maskUpper
+            mask = replace(bool, true=>maskVal)
+            replace!(mask, false=>1)
+            zData = Data[k].z .* mask
+        elseif dim == "y"
+            bool = maskLower .≤ Data[k].y .≤ maskUpper
+            mask = replace(bool, true=>maskVal)
+            replace!(mask, false=>1)
+            zData = Data[k].z .* transpose(mask)
+        end
+        DataM[k] = DataStruct(Data[k].name, Data[k].x, Data[k].y, zData, 
+            Data[k].var, Data[k].val, Data[k].unit, Data[k].file)
+    end 
+    return DataM
+end 
+
