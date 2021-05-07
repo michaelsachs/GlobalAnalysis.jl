@@ -500,7 +500,7 @@ function maskData(Data, maskLower, maskUpper; dim="x", maskVal=missing)
             zData = Data[k].z .* transpose(mask)
         end
 
-        if maskVal == missing
+        if ismissing(maskVal)
             DataM[k] = DataStruct{Union{Float64,Missing}}(Data[k].name, Data[k].x, Data[k].y, zData, 
                 Data[k].var, Data[k].val, Data[k].unit, Data[k].file)
         else
