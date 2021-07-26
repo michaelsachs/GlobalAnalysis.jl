@@ -3,7 +3,7 @@
 #interpolated if required. Result is datastruct which contains one element for each unique set 
 #of parameters (e.g. fluence, temperature)
 
-include("TypeDefinitions.jl")
+#include("TypeDefinitions.jl")
 
 using CSV, Glob
 using DataFrames
