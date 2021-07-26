@@ -91,7 +91,7 @@ function importData(directory; miss="Missing")
     for nFile in 1:length(files)
 
         #import; all entries which cannot be converted to Float64 are imported as missing
-        DF = CSV.File(files[nFile]; datarow=1, type=Float64) |> DataFrame!
+        DF = CSV.File(files[nFile]; datarow=1, type=Float64) |> DataFrame
         #replace NaN with missing
         allowmissing!(DF)
         [replace!(col, NaN=>missing) for col = eachcol(DF)]
@@ -465,7 +465,7 @@ function importDataVectors(directory, x)
     # then remove rows which contain NaN in the final matrix 
     Y = Array{Union{Float64,Missing}}(undef,length(x),0)
     for nFile in eachindex(files)
-        DF = CSV.File(files[nFile]; datarow=2, type=Float64) |> DataFrame!
+        DF = CSV.File(files[nFile]; datarow=2, type=Float64) |> DataFrame
         data = Matrix(DF)
         # one y vector in file 
         if size(data,2) == 2
