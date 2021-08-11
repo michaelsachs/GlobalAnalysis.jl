@@ -34,6 +34,11 @@ dirData = raw"C:\Box Sync\Projects\Sam\ga\dat"
 #file = normpath(joinpath(@__DIR__,"..", raw"data\"))
 dirPureY = raw"C:\Box Sync\Projects\Sam\ga\pure_spc"
 
+# fixed parameter ranges; leave as empty array [] if no fixed parameter ranges are required
+# each element of outer array is fixed range for one component 
+# inner array format: [component number, (tuple of lower/upper y limits for fixed range), fixed value]
+paramFixed = [[1, (1,5), 0], 
+            [1, (10,15), 0]]
 
 
 #### IMPORT DATA TO BE FITTED
@@ -81,15 +86,13 @@ if xNorm == "yes"
 end
 
 
-
 ###### OPTIMISATION 
 #=
 Below two different ways are given to calculate kinetics of using the pure spectra. Both independently
 fit spectra at each time/potential using a linear combination of the pure component spectra. The 
 NLopt way does this sequentially for each spectrum, whereas BlackBoxOptim fits all spectra 
-simultaneously but still in an independent manner. I would recomment NLopt as it seems much faster 
+simultaneously but still in an independent manner. I would recommend NLopt as it seems much faster 
 =#
-
 
 #### Optimisation option 1: NLopt
 
@@ -99,13 +102,22 @@ simultaneously but still in an independent manner. I would recomment NLopt as it
 function lossFun(param, grad, currentZ)
     testZ = pureZ * Diagonal(param)
     #calculate sum of squares; coalesce sets missings to zero for fitting purposes
-    loss = sum(abs2, coalesce.(sum(testZ,dims=2),0) .- coalesce.(currentZ,0))
+    sum(abs2, coalesce.(sum(testZ,dims=2),0) .- coalesce.(currentZ,0))
 end
 
-# set up boundaries and start parameters for an intial guess
-lower = fill(0.0, size(pureZ,2))
-upper = fill(10.0, size(pureZ,2))
-startParam = fill(0.5, size(pureZ,2))
+# set up lower/upper limits for fit parameters
+lower = fill(0.0, length(y), size(pureZ,2))
+upper = fill(10.0, length(y), size(pureZ,2))
+
+# apply fixed parameter ranges by setting bounds to same value 
+for k in eachindex(paramFixed)
+    yBool = paramFixed[k][2][1] .≤ y .≤ paramFixed[k][2][2]
+    lower[yBool,paramFixed[k][1]] .= paramFixed[k][3]
+    upper[yBool,paramFixed[k][1]] .= paramFixed[k][3]
+end
+
+# set start parameters (initial guess) to mean of lower and upper limits 
+startParam = mean(cat(upper,lower;dims=3);dims=3)[:,:,1]
 
 # array to collect fit result
 paramOpt = Array{Float64}(undef,length(y),size(pureZ,2))
@@ -116,15 +128,15 @@ Threads.@threads for ny in 1:length(y)
 
     # set up NLopt parameters
     # COBYLA is a gradient free optimisation algorithm, hence grad is unused above
-    opt = Opt(:LN_COBYLA, length(startParam)) 
-    lower_bounds!(opt,lower)
-    upper_bounds!(opt,upper)
+    opt = Opt(:LN_COBYLA, size(pureZ,2)) 
+    lower_bounds!(opt,lower[ny,:])
+    upper_bounds!(opt,upper[ny,:])
     min_objective!(opt, (param,grad)->lossFun(param,grad,currentZ))
     xtol_rel!(opt, 1e-8)
     maxeval!(opt, 10000)
 
     # run optimisation 
-    (NLOminf,NLOminx,NLOret) = NLopt.optimize(opt, startParam)
+    (NLOminf,NLOminx,NLOret) = NLopt.optimize(opt, startParam[ny,:])
     @show NLOret
     # write fitted paramers into paramOpt
     paramOpt[ny,:] = NLOminx
