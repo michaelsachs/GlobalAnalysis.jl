@@ -121,6 +121,7 @@ startParam = mean(cat(upper,lower;dims=3);dims=3)[:,:,1]
 
 # array to collect fit result
 paramOpt = Array{Float64}(undef,length(y),size(pureZ,2))
+retCodes = Array{Symbol}(undef,length(y))
 @time begin 
 Threads.@threads for ny in 1:length(y)
     # y slice in z matrix (e.g. current spectrum)
@@ -137,12 +138,26 @@ Threads.@threads for ny in 1:length(y)
 
     # run optimisation 
     (NLOminf,NLOminx,NLOret) = NLopt.optimize(opt, startParam[ny,:])
-    @show NLOret
-    # write fitted paramers into paramOpt
+    # write fit results into preallocated arrays
     paramOpt[ny,:] = NLOminx
+    retCodes[ny] = NLOret
 
 end
 end #time end
+
+# count return code occurences
+retCodesUnique = unique(retCodes)
+retCodesCount = Int64.(zeros(length(retCodesUnique)))
+for k in eachindex(retCodes)
+    retBool = retCodesUnique .== retCodes[k]
+    retCodesCount[retBool] .+= 1
+end
+
+# print out return codes and their number of occurences
+println("Return code summary:")
+for k in eachindex(retCodesUnique)
+    println("$(retCodesCount[k])x $(retCodesUnique[k])")
+end
 
 # write fit kinetics to .csv file 
 writedlm("GA_kinetics.csv",[y paramOpt],',')
