@@ -76,13 +76,26 @@ function findVec(A,a)
     end
 end
 
-# imports all .csv files in chosen directory
-# first column in csv is x data, first coumn is y data, [1,1] is not used, rest is z data
-function importData(directory)
-    files = glob("*.csv", directory)
-    fileNames = readdir(directory)
-    # remove elements which do not end in .csv
-    filter!(x->x[end-3:end]==".csv", fileNames)
+
+"""
+Imports single dataset if `path` points to a file, or all datasets in `path`
+if it points to a folder.
+
+Dataset format is .csv, where the first column in csv is x data (e.g. energy axis), first 
+coulumn is y data (e.g. time axis), and the rest are amplitudes at points in x and y. 
+The first point in x and y, i.e. [1,1], is not used.
+"""
+function importData(path)
+
+    if isfile(path)
+        files = [path]
+        fileNames = [splitdir(path)[2]]
+    elseif isdir(path)
+        files = glob("*.csv", directory)
+        fileNames = readdir(directory)
+        # remove elements which do not end in .csv
+        filter!(x->x[end-3:end]==".csv", fileNames)
+    end
 
     X = []
     Y = []
