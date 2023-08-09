@@ -78,7 +78,7 @@ end
 
 # imports all .csv files in chosen directory
 # first column in csv is x data, first coumn is y data, [1,1] is not used, rest is z data
-function importData(directory; miss="Missing")
+function importData(directory)
     files = glob("*.csv", directory)
     fileNames = readdir(directory)
     # remove elements which do not end in .csv
@@ -88,24 +88,23 @@ function importData(directory; miss="Missing")
     Y = []
     Z = []
     param = []
-    for nFile in 1:length(files)
+    for nf in eachindex(files)
 
-        #import; all entries which cannot be converted to Float64 are imported as missing
-        DF = CSV.File(files[nFile]; datarow=1, type=Float64) |> DataFrame
-        #replace NaN with missing
-        allowmissing!(DF)
-        [replace!(col, NaN=>missing) for col = eachcol(DF)]
-        #convert DataFrame to array. At this point it should only contain Float64 and missing
+        # import; all entries which cannot be converted to Float64 are imported as missing
+        DF = CSV.File(files[nf]; skipto=1, types=Float64) |> DataFrame
+        # convert missing (e.g. from text in .csv) to NaN
+        DF = coalesce.(DF,NaN)
+        # convert DataFrame to array
         DF = Matrix(DF)
 
-        #count missings in each col
-        NumMissingsCols = [sum(ismissing.(col)) for col = eachcol(DF)]
-        #count missings in each row
-        NumMissingsRows = [sum(ismissing.(row)) for row = eachrow(DF)]
-        #remove cols/rows with >90% missings
-        DF = DF[NumMissingsRows .< (size(DF,2)*0.90), NumMissingsCols .< (size(DF,1)*0.90)]
+        # count NaN in each col
+        NumNaNCols = [sum(isnan.(col)) for col = eachcol(DF)]
+        # count NaN in each row
+        NumNaNRows = [sum(isnan.(row)) for row = eachrow(DF)]
+        # remove cols/rows with >90% NaN
+        DF = DF[NumNaNRows .< (size(DF,2)*0.90), NumNaNCols .< (size(DF,1)*0.90)]
 
-        #separate imported data into x, y, z 
+        # separate imported data into x, y, z 
         x = DF[2:end, 1]
         y = DF[1, 2:end]
         z = DF[2:end, 2:end]
@@ -114,8 +113,8 @@ function importData(directory; miss="Missing")
         # average x/y entries with same value 
         xUnique = unique(x)
         if x ≠ xUnique
-            zxUnique = Array{Union{Float64,Missing}}(undef,length(xUnique),length(y))
-            for nx in 1:length(xUnique)
+            zxUnique = Array{Float64}(undef,length(xUnique),length(y))
+            for nx in eachindex(xUnique)
                 xBool = x .== xUnique[nx]
                 zxUnique[nx,:] = mean(z[xBool,:], dims=1)
             end
@@ -126,7 +125,7 @@ function importData(directory; miss="Missing")
         yUnique = unique(y)
         if y ≠ yUnique
             zUnique = Array{Union{Float64,Missing}}(undef,length(xUnique),length(yUnique))
-            for ny in 1:length(yUnique)
+            for ny in eachindex(yUnique)
                 yBool = y .== yUnique[ny]
                 zUnique[:,ny] = mean(zxUnique[:,yBool], dims=2)
             end
@@ -138,16 +137,16 @@ function importData(directory; miss="Missing")
         # extract variable data (e.g. fluence; temperature)
         # divide by separators "__"
         # add m in case string starts with "__"
-        strArray = split("m"*fileNames[nFile], "__")
+        strArray = split("m"*fileNames[nf], "__")
         # no separator
         if length(strArray) == 1
-            name = fileNames[nFile]
+            name = fileNames[nf]
             vars = []
             vals = []
             units = []
         # one separator
         elseif length(strArray) == 2
-            error("\"$(fileNames[nFile])\" contains one \"__\" separator. Must contain ≥2 or none.")
+            error("\"$(fileNames[nf])\" contains one \"__\" separator. Must contain ≥2 or none.")
         # two separators
         elseif length(strArray) == 3
             name = strArray[2]
@@ -162,14 +161,14 @@ function importData(directory; miss="Missing")
             vars = Array{String}(undef, length(strArrayAllVar))
             vals = Array{Float64}(undef, length(strArrayAllVar))
             units = Array{String}(undef, length(strArrayAllVar))
-            for numVar in 1:length(strArrayAllVar)
+            for numVar in eachindex(strArrayAllVar)
                 #divide into var and unit
                 strArraySingleVar = split(strArrayAllVar[numVar], "_")
                 vars[numVar] = strArraySingleVar[1]
                 try
                     vals[numVar] = parse(Float64, strArraySingleVar[2])
                 catch err
-                    error("\"$(strArraySingleVar[2])\" in \"$(fileNames[nFile])\" must not contain non-numeric characters")
+                    error("\"$(strArraySingleVar[2])\" in \"$(fileNames[nf])\" must not contain non-numeric characters")
                 end
 
                 if length(strArraySingleVar) == 2
@@ -198,7 +197,7 @@ function importData(directory; miss="Missing")
 
     ### combine datasets which have same parameters
     Data = StructArray{DataStruct}(undef,length(paramUnique))
-    for nAllParam in 1:length(paramUnique)
+    for nAllParam in eachindex(paramUnique)
         paramBool = [paramUnique[nAllParam]] .== param
 
         XPar = X[paramBool]
@@ -246,7 +245,7 @@ function importData(directory; miss="Missing")
             #YParItpBoolAr = []
             XParCommonBoolAr = []#[trues(length(XPar[1])), trues(length(XPar[2]))]#[]
             YParCommonBoolAr = []
-            for bb in 1:length(XPar)
+            for bb in eachindex(XPar)
                 #interpolate if overlap with other datasets OR within common itp dimensions, BUT only within dimensions of
                 #current param dataset
                 #XParItpBool = (XPar[bb] .> XParCommon[1]) .& (XPar[bb] .< XParCommon[end]) .| XParOverlapBoolAr[bb] ###emprty
@@ -276,7 +275,7 @@ function importData(directory; miss="Missing")
             #if empty: make overlap all full and commonBool all empty
 
             #=
-            # interpolation onto YParCommon. Note that missing is not currently supported by Interpolations, therefore missings are 
+            # interpolation onto YParCommon. Note that missing is not currently supported by Interpolations, therefore NaN are 
             # for now converted to NaN and then back to missing after interpolation 
             ZParXInterpolated = []
             ZParYInterpolated = []
@@ -295,25 +294,25 @@ function importData(directory; miss="Missing")
                 XParNaN = coalesce.(XPar[kk][XParOverlapBool], NaN) #chnage way these emtpy ones are stored?
                 YParNaN = coalesce.(YPar[kk][YParOverlapBool], NaN)
                 ZParNaN = coalesce.(ZPar[kk][XParOverlapBool,YParOverlapBool], NaN)
-                XParCommonNaN = coalesce.(XParCommon[XParCommonBoolAr[kk]],NaN) 
+                XParCommon = coalesce.(XParCommon[XParCommonBoolAr[kk]],NaN) 
                 #emty means there are no common ones; all should be appended later
 
-                YParCommonNaN = coalesce.(YParCommon[YParCommonBoolAr[kk]],NaN)
+                YParCommonSel = coalesce.(YParCommon[YParCommonBoolAr[kk]],NaN)
                 #itpYPar = interpolate((XPar[kk],YPar[kk],), ZPar[kk], Gridded(Linear()))
                 #replace missing by NaN as long as it is not supported by Interpolations
                 itpXYPar = interpolate((XParNaN,YParNaN,), ZParNaN, Gridded(Linear()))
                 #extrapolate to NaN outside array dimensions. Replace by missing once supported
                 itpXYPar = extrapolate(itpXYPar, NaN)
                 # separate interpolated vectors for X and Y to avoid returning only their overlap
-                ZParXinterp = itpXYPar(XParCommonNaN, YParNaN)
+                ZParXinterp = itpXYPar(XParCommon, YParNaN)
                 ZParXinterp = replace(ZParXinterp, NaN=>missing)
                 push!(ZParXInterpolated, ZParXinterp)
 
-                ZParYinterp = itpXYPar(XParNaN, YParCommonNaN)
+                ZParYinterp = itpXYPar(XParNaN, YParCommonSel)
                 ZParYinterp = replace(ZParYinterp, NaN=>missing)
                 push!(ZParYInterpolated, ZParYinterp)
 
-                ZParXYinterp = itpXYPar(XParCommonNaN, YParCommonNaN)
+                ZParXYinterp = itpXYPar(XParCommon, YParCommonSel)
                 ZParXYinterp = replace(ZParXYinterp, NaN=>missing)
                 push!(ZParXYInterpolated, ZParXYinterp)
             end
@@ -321,50 +320,44 @@ function importData(directory; miss="Missing")
             itpXYPar = interpolate((XParNaN,YParNaN,), ZParNaN, Gridded(Linear()))
             =#
 
-            # interpolation onto YParCommon. Note that missing is not currently supported by Interpolations, therefore missings are 
+            # interpolation onto YParCommon. Note that missing is not currently supported by Interpolations, therefore NaN are 
             # for now converted to NaN and then back to missing after interpolation 
             ##might not account for non overlapping y => check
             ZParXInterpolated = []
             ZParYInterpolated = []
             ZParXYInterpolated = []
             for kk in 1:length(XPar)
-                XParNaN = coalesce.(XPar[kk], NaN) #coalesce.(XPar[kk][XParOverlapBoolAr[kk]], NaN)
-                YParNaN = coalesce.(YPar[kk], NaN) #coalesce.(YPar[kk][YParOverlapBoolAr[kk]], NaN)
-                ZParNaN = coalesce.(ZPar[kk], NaN)
 
                 # set up X vector to interpolate onto 
                 if XParOverlapAr[kk] == []
                     # if no overlap for current element use original vector for interpolation  
-                    XParCommonNaN = coalesce.(XPar[kk],NaN)
+                    XParCommonSel = XPar[kk]
                 else
                     # otherwise use itp target vector 
-                    XParCommonNaN = coalesce.(XParCommon[XParCommonBoolAr[kk]],NaN)
+                    XParCommonSel = XParCommon[XParCommonBoolAr[kk]]
                 end
 
                 # set up Y vector to interpolate onto 
                 if YParOverlapAr[kk] == []
                     # if no overlap for current element use original vector for interpolation 
-                    YParCommonNaN = coalesce.(YPar[kk],NaN)
+                    YParCommonSel = YPar[kk]
                 else
                     # otherwise use itp target vector 
-                    YParCommonNaN = coalesce.(YParCommon[YParCommonBoolAr[kk]],NaN)
+                    YParCommonSel = YParCommon[YParCommonBoolAr[kk]]
                 end
 
                 #replace missing by NaN as long as it is not supported by Interpolations
-                itpXYPar = interpolate((XParNaN,YParNaN,), ZParNaN, Gridded(Linear()))
+                itpXYPar = interpolate((XPar[kk],YPar[kk],), ZPar[kk], Gridded(Linear()))
                 #extrapolate to NaN outside array dimensions. Replace by missing once supported
                 itpXYPar = extrapolate(itpXYPar, NaN)
                 # separate interpolated vectors for X and Y to avoid returning only their overlap
-                ZParXinterp = itpXYPar(XParCommonNaN, YParNaN)
-                ZParXinterp = replace(ZParXinterp, NaN=>missing)
+                ZParXinterp = itpXYPar(XParCommonSel, YPar[kk])
                 push!(ZParXInterpolated, ZParXinterp)
 
-                ZParYinterp = itpXYPar(XParNaN, YParCommonNaN)
-                ZParYinterp = replace(ZParYinterp, NaN=>missing)
+                ZParYinterp = itpXYPar(XPar[kk], YParCommonSel)
                 push!(ZParYInterpolated, ZParYinterp)
 
-                ZParXYinterp = itpXYPar(XParCommonNaN, YParCommonNaN)
-                ZParXYinterp = replace(ZParXYinterp, NaN=>missing)
+                ZParXYinterp = itpXYPar(XParCommonSel, YParCommonSel)
                 push!(ZParXYInterpolated, ZParXYinterp)
             end
 
@@ -394,9 +387,9 @@ function importData(directory; miss="Missing")
             ### combine parameter datasets into one 
             XParAll = sort!(unique!(vcat(XParNew...)))
             YParAll = sort!(unique!(vcat(YParNew...)))
-            ZParAll = zeros(Union{Float64,Missing}, length(XParAll), length(YParAll))
+            ZParAll = zeros(length(XParAll), length(YParAll))
             #array to keep track of how many datasets contribute to each datapoint
-            numZParAll = zeros(Union{Int64,Missing}, length(XParAll), length(YParAll))
+            numZParAll = zeros(length(XParAll), length(YParAll))
 
             for öö in 1:length(XPar)
                 # ParNew are contiguous pieces of ParAll; return their indices
@@ -406,8 +399,7 @@ function importData(directory; miss="Missing")
                 ZParAll[XParBool,YParBool] .+= ZParNew[öö]
                 numZParAll[XParBool,YParBool] .+= 1
             end
-            # in the next step this turns all ZParAll points with no data into missings
-            replace!(numZParAll, 0=>missing)
+            # in the next step this turns all ZParAll points with no data into NaN
             # new array where all points with contributions from multiple datasets are
             # averaged
             ZParAll ./= numZParAll
@@ -424,29 +416,20 @@ function importData(directory; miss="Missing")
             ZParAll ./= length(XPar)
         end
 
-        #use NaN instead of Missing if desired 
-        if miss == "NaN"
-            XParAll = coalesce.(XParAll, NaN)
-            YParAll = coalesce.(YParAll, NaN)
-            ZParAll = coalesce.(ZParAll, NaN)
-            Data[nAllParam] = deepcopy(DataStruct{Float64}(String(paramUnique[nAllParam][1]), XParAll, YParAll, ZParAll, 
-                paramUnique[nAllParam][2], paramUnique[nAllParam][3], paramUnique[nAllParam][4], 
-                fileNames[paramBool]))
-        elseif miss == "Missing"
-        #store combined data in new DataStruct
-            Data[nAllParam] = deepcopy(DataStruct{Union{Float64,Missing}}(String(paramUnique[nAllParam][1]), XParAll, YParAll, ZParAll, 
-                paramUnique[nAllParam][2], paramUnique[nAllParam][3], paramUnique[nAllParam][4], 
-                fileNames[paramBool]))
-        else
-            error("miss must be \"Missing\" or \"NaN\"")
-        end
+        #XParAll = coalesce.(XParAll, NaN)
+        #YParAll = coalesce.(YParAll, NaN)
+        #ZParAll = coalesce.(ZParAll, NaN)
+        Data[nAllParam] = deepcopy(DataStruct{Float64}(String(paramUnique[nAllParam][1]), XParAll, YParAll, ZParAll, 
+            paramUnique[nAllParam][2], paramUnique[nAllParam][3], paramUnique[nAllParam][4], 
+            fileNames[paramBool]))
+
 
 
     end
     return Data
 end
 
-#make X and Y non missings?
+#make X and Y non NaN?
 
 
 
@@ -464,8 +447,8 @@ function importDataVectors(directory, x)
     # interpolate data vectors onto x; extrapolate to NaN if values are outside x dimensions,
     # then remove rows which contain NaN in the final matrix 
     Y = Array{Union{Float64,Missing}}(undef,length(x),0)
-    for nFile in eachindex(files)
-        DF = CSV.File(files[nFile]; datarow=2, type=Float64) |> DataFrame
+    for nf in eachindex(files)
+        DF = CSV.File(files[nf]; datarow=2, type=Float64) |> DataFrame
         data = Matrix(DF)
         # one y vector in file 
         if size(data,2) == 2
