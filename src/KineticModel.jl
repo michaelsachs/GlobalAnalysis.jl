@@ -9,50 +9,25 @@ using NaNStatistics
 include("IRFConvolution.jl")
 include("DataImport.jl")
 include("TypeDefinitions.jl")
-####### ONLY EDIT BETWEEN THESE LINES #######
 
-RealData = importData("/Users/jessicaflowers/Desktop/JULIA/data/CdO/"; miss="NaN")
-RealData = RealData[1]
+"""
+In order to simulate the kinetic model, there is information that needs to be provided to the simulator in a specific format:
+    1. The initial condition, i.e. the amplitudes of each species/component at the beginning of the simulation. This is given as a vector u0.
+    2. Parameter values, i.e. the values of the rate constants. This is given as a vector p.
+    3. Time span for which we run the simulation. 
 
-# define a kinetic model
-rs = @reaction_network begin
-    k1, A --> B
-    k2, B --> 0
-end
-
-# define bounds for the parameter optimization 
-state_lower = [1, 0] # A, B, C
-state_upper = [1, 0] 
-
-IRF_lower = [0.1, 0.01]
-IRF_upper = [0.2, 0.08]
-
-rate_const_lower = [1, 0.0001]
-rate_const_upper = [3, 0.0003]
+Goals of the GetData function:
+    1. Extract all necessary information from the kinetic model defined in the first cell, i.e., the rate constants (k1, k2,...) and components (A, B,...).
+    2. Set up vectors u0 and p. 
+        a. Create an empty dictionary of the symbolic representations for each component, i.e. key = A, value = []
+        b. Do the same for the rate constants, i.e. key = k1, value = []
+        b. Map the corresponding values from the input param vector onto the elements in your dictionaries, i.e key = A, value = param[1] = 1
+    3. Simulate the kinetic model and convolve the resulting kinetic traces in order to represent the IRF.
+    4. Gererate spectral signatures based on these kinetic traces and the real input data.
+    5. Generate a simulated 2D data matrix based on the simulated kinetics and spectra.
+"""
 
 
-####### ONLY EDIT BETWEEN THESE LINES #######
-
-# some pre-processing of the input csv file
-frequencies = RealData.x
-# frequencies = vcat(frequencies...)
-time = RealData.y
-# time = vcat(time...)
-Data = RealData.z
-# Data = (vcat(Data...))
-# Data = coalesce.(Data, NaN)
-
-
-# create bounds array
-lower = vcat(state_lower, IRF_lower, rate_const_lower)
-upper = vcat(state_upper, IRF_upper, rate_const_upper)
-
-bounds = Array{Tuple{Float64, Float64}}(undef,length(lower))
-for k in 1:length(lower)
-    bounds[k] = (lower[k], upper[k])
-end
-
-# function to produce data with "guessed" parameters
 function GetData(param) # A, B, ..., μ, σ, k1, k2, k3
     # Extract the number of states/components and rate constants from the kinetic model
     num_states = length(states(rs)) # number of components
@@ -116,8 +91,14 @@ function GetData(param) # A, B, ..., μ, σ, k1, k2, k3
     return testData, TestSpec, KinMatrix
 end
 
-# objective function which returns the sum of squared differences bewteen 
-# the produced data with guessed parameters (GetData) and the real data matrix
+
+"""
+Goals of Objective function:
+    1. Read the simulated data matrix from GetData.
+    2. Compare simulated data to real data and return the sum of squared differences. 
+    3. Return a "residual map", if specified by the user. 
+"""
+
 function Objective(param; output="res")
     da = GetData(param)
     testData = da[1]
@@ -132,79 +113,16 @@ function Objective(param; output="res")
 end
 
 # minimize objective function to optimize parameters
-# OP = bboptimize(Objective; SearchRange = bounds)
-RecoveredParam = best_candidate(OP)
+function run_optim(obj, bound)
+    bboptimize(obj; SearchRange = bound)
+end
 
-RecoveredData = GetData(RecoveredParam)
-DataMatrix = RecoveredData[1] # data matrix
-RecoveredSpec = RecoveredData[2] # spectral signatures
-RecoveredKinetics = RecoveredData[3] # kinetic traces
-
-# kinetics
-tpos = time.>0
-plot(time[tpos], RecoveredKinetics[1,:][tpos], xscale=:log10,
-     title="Recovered Kinetics", xlabel="log(Time)", legend=:topleft, linewidth = 2)
-plot!(time[tpos], RecoveredKinetics[2,:][tpos], xscale=:log10, linewidth = 2)
-# plot!(time[tpos], RecoveredKinetics[3,:][tpos], xscale=:log10, linewidth = 2)
-
-
-
-# spectral signatures
-plot(frequencies, RecoveredSpec, xlabel="Wavelength", linewidth = 2) 
-
-plot(frequencies, RecoveredSpec, title="Recovered Spectral Signatures", xlabel="Wavelength", linewidth = 2) 
-
-# 3D data 
-surface(time, frequencies, DataMatrix, title="Recovered Data", xlabel="Time", ylabel="         Wavelength", xguidefontsize=10, yguidefontsize=10, xrotation = 45, right_margin=15Plots.mm, colorbar_title="\n\n\n\nΔ Absorbance")
-surface(time, frequencies, Data, title="Real Data", xlabel="Time", ylabel="         Wavelength", xguidefontsize=10, yguidefontsize=10, xrotation = 45, right_margin=15Plots.mm, colorbar_title="\n\n\n\nΔ Absorbance")
-
-# residual maps 
-map = Objective(RecoveredParam; output="map")
-
-real_heatmap = heatmap(time, frequencies, Data, 
-    xlabel="Time", ylabel="Wavelength", title="Real Data", 
-    colorbar_title="\n\nΔ Absorbance", right_margin=15Plots.mm, left_margin=10Plots.mm, 
-    xguidefontsize=10, yguidefontsize=10,
-    c = :thermal)
-optim_heatmap = heatmap(time, frequencies, DataMatrix, 
-    xlabel="Time", ylabel="Wavelength", title="Recovered Data" ,
-    colorbar_title="\n\nΔ Absorbance", right_margin=15Plots.mm, left_margin=10Plots.mm, 
-    xguidefontsize=10, yguidefontsize=10,
-    c = :thermal)
-
-residual_val = Objective(RecoveredParam; output="res")
-
-# # Normalize the spectral signatures and kinetics
-
-# kn1 = RecoveredKinetics[1,:]
-# kn2 = RecoveredKinetics[2,:]
-# kn3 = RecoveredKinetics[3,:]
-
-# max1 = maximum(kn1)
-# max2 = maximum(kn2)
-# max3 = maximum(kn3)
-
-
-# kn1 = kn1 / max1
-# kn2 = kn2 / max2
-# kn3 = kn3 / max3
-
-# plot(kn1)
-# plot!(kn2)
-# plot!(kn3)
-
-# spc1 = RecoveredSpec[:,1]
-# spc2 = RecoveredSpec[:,2]
-# spc3 = RecoveredSpec[:,3]
-
-# Max1 = maximum(filter(!isnan, spc1))
-# Max2 = maximum(filter(!isnan, spc2))
-# Max3 = maximum(filter(!isnan, spc3))
-
-# spc1 = spc1 / Max1
-# spc2 = spc2 / Max2
-# spc3 = spc3 / Max3
-
-# plot(spc1)
-# plot!(spc2)
-# plot!(spc3)
+# generate a residual map
+function resMap(param)
+    da = GetData(param)
+    testData = da[1]
+    return heatmap(time, frequencies, (testData - Data), xlabel="Time", ylabel="Wavelength", 
+                    title="Residuals Map", colorbar_title="\n \n \n Δ Absorbance", 
+                    right_margin=15Plots.mm, left_margin=10Plots.mm, xguidefontsize=10, yguidefontsize=10,
+                    c = :thermal)
+end
