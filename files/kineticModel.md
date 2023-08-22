@@ -112,10 +112,10 @@ Here,  $\psi(t,\gamma)$ is the two-way time-resolved spectrum,  $c_l(t)$ is the 
 
 
 ### Required User Input
-Let's dive into a practical example of how to use KineticModel.jl using a specific use case. Assume you have experimental data:
+Let's dive into a practical example of how to use KineticModel.jl. Assume you have experimental data:
 
 ```julia
-RealData = importData("path/to/data/"; miss="NaN")
+RealData = importData("path/to/data/")
 ```
 
 Now, let's say you hypothesize that the system follows a first-order reaction with two rate constants. Here's how you can set up a "guess" kinetic model using Catalyst.jl:
@@ -156,7 +156,7 @@ With these inputs in place, you're ready to start simulating. The fitting proced
 
 1. **Simulation:** Simulate the kinetic model using specified conditions and obtain an array of kinetic traces.
 2. **Convolution:** Convolve the kinetic traces with the instrument response function (IRF) parameters to model experimental smearing.
-3. **Spectral Signatures:** Extract spectral signatures from the simulated data using matrix division.
+3. **Spectral Signatures:** Extract spectral signatures from the real data and simulated kinetics using matrix division.
 4. **Objective Function:** Calculate the sum of squared differences (residual) between simulated and experimental data.
 5. **Parameter Optimization:** Adjust parameters iteratively (species amplitudes and rate constants) to minimize the residual value.
 
@@ -169,19 +169,21 @@ With these inputs in place, you're ready to start simulating. The fitting proced
 Start by importing your experimental data.
 ```julia
 # import data
-RealData = importData("/path/to/data"; miss="NaN")
+RealData = importData("/path/to/data")
 ```
 <!-- ![Alt text](realData.png) -->
-<img src="realData.png" alt="data" width="400"/>
+<img src="1stDat.png" alt="data" width="400"/>
 
+Here, we show a "fake" spectroscopic data set. We have constructed this with known kinetics and spectra, and aim to show how accurate KineticModel.jl's parameter recovery is. 
 
-Suppose you predict this system will follow a first-order reaction with two rate constants. Define your kinetic model, using Catalyst.jl, based on this prediction.
+Suppose you predict this system will follow a first-order reaction with three rate constants. Define your kinetic model, using Catalyst.jl, based on this prediction.
 
 ```julia
 # define a kinetic model
 rs = @reaction_network begin
     k1, A --> B
-    k2, B --> 0
+    k2, B --> C
+    k3, C --> 0
 end
 ```
 **Step 2: Parameter Bounds**
@@ -190,15 +192,17 @@ Next, make a prediction for the parameter bounds. KineticModel.jl can adeptly ha
 
 ```julia
 # Define bounds for the parameter optimization 
-state_lower = [1, 0] # A, B, C
-state_upper = [1, 0] 
+state_lower = [1, 0, 0] # A, B, C
+state_upper = [1, 0, 0] 
 
-IRF_lower = [0.1, 0.01] # μ, σ
-IRF_upper = [0.2, 0.08]
+IRF_lower = [0.05, 0.01] # μ, σ
+IRF_upper = [0.5, 0.09]
 
-rate_const_lower = [1, 0.0001] # k1, k2, k3, ...
-rate_const_upper = [10, 0.0010]
+rate_const_lower = [1, 0.5, 0.1] # k1, k2, k3
+rate_const_upper = [10, 1.5, 1]
 ```
+Here, we fix the amplitudes of component A to 1, and components B and C to 0. For reactions that are first order non-parallel decay, this is the appropritate approximation. 
+
 
 **Step 3: Fitting Procedure**
 
@@ -242,23 +246,23 @@ heatmap(time, wavelength, DataMatrix, xlabel="Time", ylabel="Wavelength",
 ```
 
 <!-- ![Alt text](recData.png) -->
-<img src="recData.png" alt="recData" width="400"/>
+<img src="1stRecDat.png" alt="recData" width="400"/>
 
 
 ```julia
 # kinetics
-tpos = time.>0
+plot(time, RecoveredKinetics[1,:], 
+     title="Recovered Kinetics", xlabel="Time", ylabel="Population",
+     linewidth = 2, xguidefontsize=10, yguidefontsize=10, label="A(t)")
 
-plot(time[tpos], RecoveredKinetics[1,:][tpos], xscale=:log10,
-     title="Recovered Kinetics", xlabel="log(Time)", legend=:topleft, ylabel="Population",
-     linewidth = 2, xguidefontsize=10, yguidefontsize=10, label="Kinetics for A(t)")
+plot!(time, RecoveredKinetics[2,:],
+     linewidth = 2, xguidefontsize=10, yguidefontsize=10, label="B(t)")
 
-plot!(time[tpos], RecoveredKinetics[2,:][tpos], xscale=:log10,
-     linewidth = 2, xguidefontsize=10, yguidefontsize=10, label="Kinetics for B(t)")
-
+plot!(time, RecoveredKinetics[3,:],
+     linewidth = 2, xguidefontsize=10, yguidefontsize=10, label="C(t)")
 ```
 <!-- ![Alt text](recKin.png) -->
-<img src="recKin.png" alt="recKin" width="400"/>
+<img src="1stRecKin.png" alt="recKin" width="400"/>
 
 
 ```julia
@@ -266,10 +270,18 @@ plot!(time[tpos], RecoveredKinetics[2,:][tpos], xscale=:log10,
 plot(wavelength, RecoveredSpec[:,1], title="Recovered Spectral Signatures", xlabel="Wavelength", label="A(t)", ylabel="Δ Absorbance" ) 
 
 plot!(wavelength, RecoveredSpec[:,2], label="B(t)" ) 
+
+plot!(wavelength, RecoveredSpec[:,3], label="C(t)" ) 
 ```
 
 <!-- ![Alt text](RecSpec.png) -->
-<img src="RecSpec.png" alt="spec" width="400"/>
+<img src="1stRecSpec.png" alt="spec" width="400"/>
+
+For reference, the "real" kinetics and spectra used to construct this data set are the following:
+
+<img src="1stKin.png" alt="spec" width="400"/>
+<img src="1stSpec.png" alt="spec" width="400"/>
+
 
 **Step 5: Refining Models with Residual Maps**
 
@@ -279,8 +291,149 @@ We recognize that refining a kinetic model can be a difficult and iterative proc
 map = Objective(RecoveredParam; output="map")
 ```
 <!-- ![Alt text](resMap.png) -->
-<img src="resMap.png" alt="res" width="400"/>
+<img src="1stResMap.png" alt="res" width="400"/>
 
 
 By plotting the residual map for each variation of kinetic model you test, it is easy to quantitatively compare those models and determine which is best. Ideally, you want the residual map to just be noise. 
 
+### 2nd Order 
+
+**Step 1: Importing and Initial Predictions**
+
+In this example, we show how to perform our global analysis routine using a data input that contains a second order reaction.
+```julia
+# import data
+RealData = importData("/path/to/data")
+```
+<!-- ![Alt text](realData.png) -->
+<img src="2ndData.png" alt="data" width="400"/>
+
+Again, this data set is one we have constructed computationally based on known kinetic traces and spectral signatures in order to illustrate succesfull parameter recovery. 
+
+Let the user hypothesize that this system will contain three rate constants, one of which is involved in a second order reaction. We define the kinetic model using Catalyst.jl in the same way we showed above. 
+
+```julia
+# define a kinetic model
+rs = @reaction_network begin
+    k1, A --> 0
+    k2, 2B --> 0
+    k3, C --> 0
+end
+```
+
+**Step 2: Parameter Bounds**
+
+Despite being a second order reaction, this section of code will look nearly identical to that of the first order example. Since we have chosen a parallel decay model, we can fix the amplitudes of A, B and C to 1.
+
+```julia
+# Define bounds for the parameter optimization 
+state_lower = [1, 1, 1] # A, B, C
+state_upper = [1, 1, 1] 
+
+IRF_lower = [0.1, 0.01] # μ, σ
+IRF_upper = [0.2, 0.08]
+
+rate_const_lower = [1, 0.001, 0.00001] # k1, k2, k3, ...
+rate_const_upper = [5, 0.01, 0.0001]
+```
+
+**Step 3: Fitting Procedure**
+
+Run the fitting procedure and retrieve the best set of parameters exactly as above. 
+
+
+
+```julia
+# Run the fitting procedure
+OP = bboptimize(Objective; SearchRange = bounds)
+
+# recover optimized parameter vector
+RecoveredParam = best_candidate(OP) 
+```
+
+**Step 4: Plotting Results**
+
+Using the optimized parameter vector, you can recover the simulated kinetics, spectral signatures, and data matrix.
+
+```julia
+# Plug optimized parameters into GetData
+RecoveredData = GetData(RecoveredParam) 
+
+# Data matrix
+DataMatrix = RecoveredData[1] 
+
+# Spectral signatures
+RecoveredSpec = RecoveredData[2] 
+
+# Kinetic
+RecoveredKinetics = RecoveredData[3] 
+```
+Visualize your results for easy comparison with experimental data. 
+
+```julia
+# heatmap of recovered data
+heatmap(time, wavelength, DataMatrix, xlabel="Time", ylabel="Wavelength", 
+    title="Recovered Data", colorbar_title=" Δ Absorbance")
+```
+
+<!-- ![Alt text](recData.png) -->
+<img src="2ndRecData.png" alt="recData" width="400"/>
+
+
+```julia
+# kinetics
+Plots.plot(time, RecoveredKinetics[1,:], 
+     title="Recovered Kinetics", xlabel="Time", ylabel="Population",
+     linewidth = 2, xguidefontsize=10, yguidefontsize=10, label="A(t)")
+
+Plots.plot!(time, RecoveredKinetics[2,:],
+     linewidth = 2, xguidefontsize=10, yguidefontsize=10, label="B(t)")
+
+Plots.plot!(time, RecoveredKinetics[3,:],
+     linewidth = 2, xguidefontsize=10, yguidefontsize=10, label="C(t)")
+
+```
+<!-- ![Alt text](recKin.png) -->
+<img src="2ndRecKin.png" alt="recKin" width="400"/>
+
+
+```julia
+# Spectral Signatures
+plot(wavelength, RecoveredSpec[:,1], title="Recovered Spectral Signatures", xlabel="Wavelength", label="A(t)", ylabel="Δ Absorbance" ) 
+
+plot!(wavelength, RecoveredSpec[:,2], label="B(t)" ) 
+
+plot!(wavelength, RecoveredSpec[:,3], label="C(t)" ) 
+```
+
+<!-- ![Alt text](RecSpec.png) -->
+<img src="2ndRecSpec.png" alt="spec" width="400"/>
+
+For reference, the "real" kinetics and spectra used to construct this data set are the following:
+
+<img src="2ndKin.png" alt="spec" width="400"/>
+<img src="2ndSpec.png" alt="spec" width="400"/>
+
+**Step 5: Refining Models with Residual Maps**
+
+Plot the residual map to compare the accuracy of this kinetic model with other models you might hypothesise for a given data set.
+``` julia
+# residual maps 
+map = Objective(RecoveredParam; output="map")
+```
+<img src="2ndResMap.png" alt="res" width="400"/>
+
+
+## 5. Notes For Plotting
+Often with time resolved spectroscopic experiments, the time vector span is quite long. It can be useful to plot the time component on a log scale for visualizing the kinetic traces. In order to do so, extract only the positive time points from both the time vector as well as the recovered kinetics matrix.  
+``` julia
+# Positive time points
+tpos = time.>0
+
+plot(time[tpos], RecoveredKinetics[1,:][tpos], xscale=:log10,
+     title="Recovered Kinetics", xlabel="log(Time)", legend=:topleft, ylabel="Population",
+     linewidth = 2, xguidefontsize=10, yguidefontsize=10, label="Kinetics for A(t)")
+``` 
+Here we show how to plot just the first trace, but the same method can be applied to all components in the kinetics matrix. 
+
+Becasue we only consider positive points, there is some loss of data. While the log scale may show the shape of your kinetic traces more acuratly, the user must decide whether the loss of data is a necessary sacrifice. 
