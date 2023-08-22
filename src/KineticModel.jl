@@ -105,7 +105,7 @@ function Objective(param; output="res")
     if output == "res"
         return nansum((testData .- Data).^2) #sum(abs2, testData .- Data)
     elseif output == "map"
-        return heatmap(time, frequencies, (testData - Data), xlabel="Time", ylabel="Wavelength", 
+        return heatmap(time, wavelength, (testData - Data), xlabel="Time", ylabel="Wavelength", 
                     title="Residuals Map", colorbar_title="\n \n \n Δ Absorbance", 
                     right_margin=15Plots.mm, left_margin=10Plots.mm, xguidefontsize=10, yguidefontsize=10,
                     c = :thermal)
@@ -115,14 +115,4 @@ end
 # minimize objective function to optimize parameters
 function run_optim(obj, bound)
     bboptimize(obj; SearchRange = bound)
-end
-
-# generate a residual map
-function resMap(param)
-    da = GetData(param)
-    testData = da[1]
-    return heatmap(time, frequencies, (testData - Data), xlabel="Time", ylabel="Wavelength", 
-                    title="Residuals Map", colorbar_title="\n \n \n Δ Absorbance", 
-                    right_margin=15Plots.mm, left_margin=10Plots.mm, xguidefontsize=10, yguidefontsize=10,
-                    c = :thermal)
 end
