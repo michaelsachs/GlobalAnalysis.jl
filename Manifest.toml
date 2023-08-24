@@ -295,42 +295,6 @@ git-tree-sha1 = "da8b06f89fce9996443010ef92572b193f8dca1f"
 uuid = "717857b8-e6f2-59f4-9121-6e50c889abd2"
 version = "0.7.8"
 
-[[Dash]]
-deps = ["CodecZlib", "DashBase", "DashCoreComponents", "DashHtmlComponents", "DashTable", "DataStructures", "HTTP", "JSON", "JSON2", "MD5", "PlotlyBase", "Sockets", "Test", "UUIDs"]
-git-tree-sha1 = "d5afc7e1816c535b9023d3ae0154c6af3def6d7b"
-uuid = "1b08a953-4be3-4667-9a23-3db579824955"
-version = "0.1.6"
-
-[[DashBase]]
-deps = ["JSON2", "Test"]
-git-tree-sha1 = "fc7632ba6b4f1c085620870142114f428f51eff0"
-uuid = "03207cf0-e2b3-4b91-9ca8-690cf0fb507e"
-version = "0.1.0"
-
-[[DashCoreComponents]]
-deps = ["DashBase"]
-git-tree-sha1 = "8af600ca3179b193698472376a133c1caf3f2adc"
-uuid = "1b08a953-4be3-4667-9a23-9da06441d987"
-version = "1.17.1"
-
-[[DashDaq]]
-deps = ["Dash"]
-git-tree-sha1 = "74484bb5f2193fc7379b295f81e6563624e9b8ee"
-uuid = "1b08a953-4be3-4667-9a23-a540cca008f6"
-version = "0.5.0"
-
-[[DashHtmlComponents]]
-deps = ["DashBase"]
-git-tree-sha1 = "14ad028d5a5fa708589e38cf05ff853ab0bac7f5"
-uuid = "1b08a953-4be3-4667-9a23-24100242a84a"
-version = "1.1.4"
-
-[[DashTable]]
-deps = ["DashBase"]
-git-tree-sha1 = "e2be29d5b901ff46c5661f407d83a541625cd1a0"
-uuid = "1b08a953-4be3-4667-9a23-f0e2ba4deb9a"
-version = "4.12.0"
-
 [[DataAPI]]
 git-tree-sha1 = "8da84edb865b0b5b0100c0666a9bc9a0b71c553c"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
@@ -800,12 +764,6 @@ git-tree-sha1 = "31e996f0a15c7b280ba9f76636b3ff9e2ae58c9a"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.4"
 
-[[JSON2]]
-deps = ["Dates", "Parsers", "Test"]
-git-tree-sha1 = "dcc3c2d9bdc036677a031ea97b76925983ca1f18"
-uuid = "2535ab7d-5cd8-5a07-80ac-9b1792aadce3"
-version = "0.3.4"
-
 [[JpegTurbo_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "6f2675ef130a300a112286de91973805fcc5ffbc"
@@ -998,12 +956,6 @@ version = "0.3.24"
 
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
-
-[[MD5]]
-deps = ["Random", "SHA"]
-git-tree-sha1 = "eeffe42284464c35a08026d23aa948421acf8923"
-uuid = "6ac74813-4b46-53a4-afec-0b5dc9d7885c"
-version = "0.2.1"
 
 [[MKL_jll]]
 deps = ["Artifacts", "IntelOpenMP_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "Pkg"]
