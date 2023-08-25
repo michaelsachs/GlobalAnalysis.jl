@@ -11,6 +11,7 @@ using StructArrays
 using Statistics
 using Interpolations
 
+include("TypeDefinitions.jl")
 
 function dataOverlap(XPar)
     #bool for non-overlapping parts of vector
@@ -91,8 +92,8 @@ function importData(path)
         files = [path]
         fileNames = [splitdir(path)[2]]
     elseif isdir(path)
-        files = glob("*.csv", directory)
-        fileNames = readdir(directory)
+        files = glob("*.csv", path)
+        fileNames = readdir(path)
         # remove elements which do not end in .csv
         filter!(x->x[end-3:end]==".csv", fileNames)
     end
