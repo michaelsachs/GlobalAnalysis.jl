@@ -152,13 +152,15 @@ function convolveIRF(Time, Kin, μ, σ)
 
 end
 
-#numerical integration via trapezoidal method
-function trapezIntegration(X, Y) 
+"""
+Performs numerical integration of `y` over `x` via trapezoidal method.
+"""
+function trapezIntegration(x, y) 
     # Check same length of X and Y
-    @assert length(X) == length(Y)
+    @assert length(x) == length(y)
     out = 0.0
-    for n in 2:length(X)
-      out = out + 0.5*(X[n] - X[n-1])*(Y[n] + Y[n-1])
+    for n in 2:length(x)
+      out += 0.5*(x[n] - x[n-1])*(y[n] + y[n-1])
     end
     return out
 end
