@@ -14,7 +14,7 @@ To address for variable time spacing:
 - signal currently needs to onset around 0
 - what if both signal and IRF are shifted (TCSPC)? or if just signal is shifted (slow TAS)?
     need to shift gaussian to match signal onset? option of per WL IRF?
-- take into account μ shift during ODE such that final conv kin is sampled like expKin (Time-μ)
+- take into account μ shift during ODE such that final conv kin is sampled like expKin (time-μ)
 
 - shift interpolation window gives same result as long as centred around gaussian as is indep of time vector
 =#
@@ -22,69 +22,69 @@ To address for variable time spacing:
 #= some test parameters
 μ = 0.3
 σ = 0.1
-TimePos = Time[Time .> 0]
-simKin = exp.(-0.1 .* TimePos)
+timePos = time[time .> 0]
+simKin = exp.(-0.1 .* timePos)
 =#
 
-function defineIRFTime(Time, μ, σ)
-    TimeDiff = diff(Time)
-    #Time = Time .+ μ
+function defineIRFtime(time, μ, σ)
+    timeDiff = diff(time)
+    #time = time .+ μ
     # check if time points are evenly spaced; all(x,itr) can short circuit, 
     #   thus performance hit should be small
-    if all(x->x==TimeDiff[1], TimeDiff) == false
+    if all(x->x==timeDiff[1], timeDiff) == false
         # time step in IRF window is smallest time step in dataset
-        IRFStep = minimum(TimeDiff)
+        IRFStep = minimum(timeDiff)
         # IRF window width in pos/neg direction
         IRFWindow = 30*σ
         # evenly spaced time vector for IRF convolution
-        TimeIRFPos = collect(IRFStep/2:IRFStep:IRFWindow)
+        timeIRFPos = collect(IRFStep/2:IRFStep:IRFWindow)
         # convolved trace will be cut here as it will have a sharp drop where kinetic data ends
         IRFWindowCut = IRFWindow*0.5
         
         # combine IRF and post-IRF times in array for single call to ODE solver
         # shift post-IRF time by -μ to evaluate correct points for original time vector in ODE
-        TimeODE = sort(unique([TimeIRFPos; Time[Time .> IRFWindowCut] .- μ]))
+        timeODE = sort(unique([timeIRFPos; time[time .> IRFWindowCut] .- μ]))
 
         # keep track of which time in ODE time vector is IRF/post-IRF (some may be in both)
-        TimeODEBool = [in.(TimeODE, Ref(Set(TimeIRFPos))), in.(TimeODE, Ref(Set(Time .- μ)))]
+        timeODEBool = [in.(timeODE, Ref(Set(timeIRFPos))), in.(timeODE, Ref(Set(time .- μ)))]
         
-        return TimeODE, TimeIRFPos, IRFWindowCut, TimeODEBool
+        return timeODE, timeIRFPos, IRFWindowCut, timeODEBool
     end
 end
 
 
 # also works for more than one kinetic in vector
-# Time includeds negative data, kin is positive data out of simulation only
+# time includeds negative data, kin is positive data out of simulation only
 # TODO: small offset btw original and convkin in convKin. check 
-function convolveIRF(Time, Kin, μ, σ, TimeIRFPos, IRFWindowCut, TimeODEBool)
+function convolveIRF(time, kin, μ, σ, timeIRFPos, IRFWindowCut, timeODEBool)
     # check if time points are evenly spaced; all(x,itr) can short circuit, 
     #   thus performance hit should be small
-    TimeDiff = diff(Time)
-    if all(x->x==TimeDiff[1], TimeDiff) == false
+    timeDiff = diff(time)
+    if all(x->x==timeDiff[1], timeDiff) == false
         # zero pre-pad simulated data
-        KinIRF = [zeros(length(TimeIRFPos),size(Kin,2)); Kin[TimeODEBool[1],:]]
+        kinIRF = [zeros(length(timeIRFPos),size(kin,2)); kin[timeODEBool[1],:]]
 
         # mirror array around zero, pos/neg symmetric
-        TimeIRF = [reverse(-TimeIRFPos); TimeIRFPos]
+        timeIRF = [reverse(-timeIRFPos); timeIRFPos]
 
         # gaussian IRF
-        IRF = pdf.(Normal(μ, σ), TimeIRF)
+        IRF = pdf.(Normal(μ, σ), timeIRF)
         # discrete convolution, hence multiply by time step
-        KinIRFConv = conv(KinIRF, IRF) .* (TimeIRFPos[2]-TimeIRFPos[1])
+        kinIRFConv = conv(kinIRF, IRF) .* (timeIRFPos[2]-timeIRFPos[1])
 
         # make conv data same length as IRF data to restore time correspondence
-        idxFirst = Int64(1 + floor(length(TimeIRF) / 2))
-        idxLast = idxFirst + size(KinIRF,1) - 1       
-        #KinConvSame = @view KinIRFConv[idxFirst:idxLast]
-        KinConvSame = KinIRFConv[idxFirst:idxLast,:]
+        idxFirst = Int64(1 + floor(length(timeIRF) / 2))
+        idxLast = idxFirst + size(kinIRF,1) - 1       
+        #kinConvSame = @view kinIRFConv[idxFirst:idxLast]
+        kinConvSame = kinIRFConv[idxFirst:idxLast,:]
 
         # for interpolation back onto original time vector
         # no interpolation along second dimension 
-        if size(Kin,2) == 1
-            KinConvSame = [KinConvSame...]
-            itpKinConv = interpolate((TimeIRF,), KinConvSame, Gridded(Linear()))
+        if size(kin,2) == 1
+            kinConvSame = [kinConvSame...]
+            itpKinConv = interpolate((timeIRF,), kinConvSame, Gridded(Linear()))
         else 
-            itpKinConv = interpolate((TimeIRF,collect(1:size(Kin,2)),), KinConvSame, 
+            itpKinConv = interpolate((timeIRF,collect(1:size(kin,2)),), kinConvSame, 
                 (Gridded(Linear()),NoInterp()))
         end
 
@@ -93,60 +93,60 @@ function convolveIRF(Time, Kin, μ, σ, TimeIRFPos, IRFWindowCut, TimeODEBool)
         
 
         # final data contains: zeros pre-IRF, interpolated cut IRF data, unaltered post-IRF data
-        #TimePos = @view Time[Time .> 0]
-        #KinConv = [zeros(length(@view Time[Time .< TimeIRF[1]])); 
-        ##    itpKinConv(@view Time[TimeIRF[1] .≤ Time .≤ IRFWindowCut]); 
-        #    @view Kin[TimeODEBool[2]]]
-        #KinConv = deepcopy(KinConv)
+        #timePos = @view time[time .> 0]
+        #kinConv = [zeros(length(@view time[time .< timeIRF[1]])); 
+        ##    itpKinConv(@view time[timeIRF[1] .≤ time .≤ IRFWindowCut]); 
+        #    @view kin[timeODEBool[2]]]
+        #kinConv = deepcopy(kinConv)
 
-        TimePos = Time[Time .> 0]
-        if size(Kin,2) == 1
-            KinConv = [zeros(length(Time[Time .< TimeIRF[1]])); 
-                itpKinConv(Time[TimeIRF[1] .≤ Time .≤ IRFWindowCut]); 
-                Kin[TimeODEBool[2]]]
+        timePos = time[time .> 0]
+        if size(kin,2) == 1
+            kinConv = [zeros(length(time[time .< timeIRF[1]])); 
+                itpKinConv(time[timeIRF[1] .≤ time .≤ IRFWindowCut]); 
+                kin[timeODEBool[2]]]
         else
-            KinConv = [zeros(length(Time[Time .< TimeIRF[1]]), size(Kin,2)); 
-                itpKinConv(Time[TimeIRF[1] .≤ Time .≤ IRFWindowCut], collect(1:size(Kin,2))); 
-                Kin[TimeODEBool[2],:]]
+            kinConv = [zeros(length(time[time .< timeIRF[1]]), size(kin,2)); 
+                itpKinConv(time[timeIRF[1] .≤ time .≤ IRFWindowCut], collect(1:size(kin,2))); 
+                kin[timeODEBool[2],:]]
         end
-        KinConv = deepcopy(KinConv)
+        kinConv = deepcopy(kinConv)
 
 
-        #plot(TimeIRF,KinIRF, linewidth=2)
-        #plot!(Time,KinConv, xlim=(-5,20))
+        #plot(timeIRF,kinIRF, linewidth=2)
+        #plot!(time,kinConv, xlim=(-5,20))
         
-        return KinConv
+        return kinConv
 
     end
 
 end
 
 
-# Time includeds negative data, kin is positive data out of simulation only
-function convolveIRF(Time, Kin, μ, σ)
+# time includeds negative data, kin is positive data out of simulation only
+function convolveIRF(time, kin, μ, σ)
     # check if time points are evenly spaced; all(x,itr) can short circuit, 
     #   thus performance hit should be small
-    TimeDiff = diff(Time)
+    timeDiff = diff(time)
     # equal spacing: no IRF window needed
-    if all(x->x==TimeDiff[1], TimeDiff) == true
+    if all(x->x==timeDiff[1], timeDiff) == true
         # zero pre-pad simulated data
-        TimePos = @view Time[Time .> 0]
-        KinIRF = [zeros(length(Time)-length(TimePos)); Kin]
+        timePos = @view time[time .> 0]
+        kinIRF = [zeros(length(time)-length(timePos)); kin]
 
         # gaussian IRF
-        IRF = pdf.(Normal(μ, σ), Time)
+        IRF = pdf.(Normal(μ, σ), time)
         # discrete convolution, hence multiply by time step
-        KinIRFConv = conv(KinIRF, IRF) * (Time[2]-Time[1])
+        kinIRFConv = conv(kinIRF, IRF) * (time[2]-time[1])
 
         # make conv data same length as IRF data to restore time correspondence
-        idxFirst = Int64(1 + floor(length(TimePos) / 2))
-        idxLast = idxFirst + length(KinIRF) - 1       
-        #KinConvSame = @view KinIRFConv[idxFirst:idxLast]
-        KinConvSame = KinIRFConv[idxFirst:idxLast]
+        idxFirst = Int64(1 + floor(length(timePos) / 2))
+        idxLast = idxFirst + length(kinIRF) - 1       
+        #kinConvSame = @view kinIRFConv[idxFirst:idxLast]
+        kinConvSame = kinIRFConv[idxFirst:idxLast]
 
-        #plot(Time,KinConvSame, xlim=(-5,20), linewidth=2, label= "μ = "*string(μ))
+        #plot(time,kinConvSame, xlim=(-5,20), linewidth=2, label= "μ = "*string(μ))
        
-        return KinConv
+        return kinConv
 
     end
 
@@ -166,48 +166,48 @@ function trapezIntegration(x, y)
 end
 
 # even spacing, measured IRF
-function defineODETime(Time::Array{<:Real,1})
-    TimeDiff = diff(Time)
+function defineODEtime(time::Array{<:Real,1})
+    timeDiff = diff(time)
     # check if time points are evenly spaced; all(x,itr) can short circuit, 
     # thus performance hit should be small
-    if all(x->x==TimeDiff[1], TimeDiff) == true
+    if all(x->x==timeDiff[1], timeDiff) == true
 
         # time vector with same number of time steps as IRF but no negative zeros
-        TimeODE = collect(0:Time[2]-Time[1]:Time[end]-Time[1])
+        timeODE = collect(0:time[2]-time[1]:time[end]-time[1])
         
-        return TimeODE
+        return timeODE
     end
 end
 
 
 
 # even spacing, measured IRF
-# Time includes negative data, kin is positive data out of simulation only
-# Kin must have same number of time steps as IRF but no negative zeros to ensure 
+# time includes negative data, kin is positive data out of simulation only
+# kin must have same number of time steps as IRF but no negative zeros to ensure 
 # that convolved trace has enough time points before dropoff (this implementation 
 # shoudl work as long as IRF has at least one zero point before rise)
-#function convolveIRFReg(Time::Array{<:Real,1}, Kin::Array{<:Real,1}, IRF::Array{<:Real,1}) 
-function convolveIRFReg(Time, Kin, IRF) 
+#function convolveIRFReg(time::Array{<:Real,1}, kin::Array{<:Real,1}, IRF::Array{<:Real,1}) 
+function convolveIRFReg(time, kin, IRF) 
     # check if time points are evenly spaced; all(x,itr) can short circuit, 
     #   thus performance hit should be small
-    TimeDiff = diff(Time)
+    timeDiff = diff(time)
     # equal spacing required
-    #if all(x->x==TimeDiff[1], TimeDiff) == true
+    #if all(x->x==timeDiff[1], timeDiff) == true
 
         #normalise IRF by its area
-        IRF = IRF ./ trapezIntegration(Time,IRF)
+        IRF = IRF ./ trapezIntegration(time,IRF)
 
         # discrete convolution, hence multiply by time step
-        KinIRFConv = DSP.conv(Kin, IRF) .* (Time[2]-Time[1])
+        kinIRFConv = DSP.conv(kin, IRF) .* (time[2]-time[1])
 
         # make conv data same length as IRF data to restore time correspondence
-        if size(Kin,2) == 1
-            KinConvSame = KinIRFConv[1:length(IRF)]
+        if size(kin,2) == 1
+            kinConvSame = kinIRFConv[1:length(IRF)]
         else
-            KinConvSame = KinIRFConv[1:length(IRF),:]
+            kinConvSame = kinIRFConv[1:length(IRF),:]
         end
 
-        return KinConvSame
+        return kinConvSame
 
     #end
 
