@@ -28,17 +28,42 @@ Goals of the GetData function:
 """
 
 """
+Generates upper and lower limits for fit parameters based on reaction
+network `rn` and `limits`.
+"""
+function generateBounds(rn, limits)
+    syms = [getSpecies(rn); getParameters(rn); :μ; :σ]
+
+    count = 0
+    lower = Float64[]
+    upper = Float64[]
+    for sym in syms
+        if sym ∈ keys(limits)
+            val = limits[sym]
+            # fit parameter is indicated by range
+            if length(val) == 2
+                count += 1
+                push!(lower,minimum(val))
+                push!(upper,maximum(val))
+            end
+        end
+    end
+    return lower, upper
+end
+
+
+"""
 Assembles parameter dictionaries for ODE solver, drawing values from (i) fit 
-parameter vector `fitParam` for fit variables, (ii) the `bounds` dictionary if 
-the variable hasa fixed value, or (iii) a `default` value for variables which 
-are neither fitted nor supplied in `bounds`. `count` keeps track of how many 
+parameter vector `fitParam` for fit variables, (ii) the `limits` dictionary if 
+the variable has a fixed value, or (iii) a `default` value for variables which 
+are neither fitted nor supplied in `limits`. `count` keeps track of how many 
 fit parameters have been assigned.
 """
-function gatherParams(syms, fitParam, bounds, default, count)
+function gatherParams(syms, fitParam, limits, default, count)
     p = Dict{Symbol,Float64}()
     for sym in syms
-        if sym ∈ keys(bounds)
-            val = bounds[sym]
+        if sym ∈ keys(limits)
+            val = limits[sym]
             # fixed parameter
             if length(val) == 1
                 if val isa Number
@@ -90,17 +115,17 @@ Generates test data by calculating kinetic traces based on time vector
 parameters in order (1) initial state populations, (2) rate constants, 
 (3) IRF parameters.
 """
-function simulateData(t, rn, param, bounds, Data)
+function simulateData(t, rn, param, limits, Data)
     species = getSpecies(rn)
     # get populations at t = 0 
-    u0, count = gatherParams(species, param, bounds, 1, 0)
+    u0, count = gatherParams(species, param, limits, 1, 0)
 
     rateConst = getParameters(rn)
     # get rate constants
-    ks, count = gatherParams(rateConst, param, bounds, NaN, count)
+    ks, count = gatherParams(rateConst, param, limits, NaN, count)
 
     # get Gaussian IRF parameters
-    irfParam, count = gatherParams([:μ,:σ], param, bounds, 0, count)
+    irfParam, count = gatherParams([:μ,:σ], param, limits, 0, count)
     μ = irfParam[:μ]
     σ = irfParam[:σ]
 
