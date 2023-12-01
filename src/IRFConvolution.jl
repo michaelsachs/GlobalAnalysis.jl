@@ -48,7 +48,7 @@ end
 
 """
 Returns time vector for ODE solver `tOde` given an input `t`
-in which time points arbitrary spacing.
+in which time points have arbitrary spacing.
 
 `tOde` contains early time points with equal spacing, used for convolution
 with the instrument response, and arbitrarily spaced points at later
@@ -65,11 +65,12 @@ function getOdeTimeVariableStep(t, μ, σ)
     # IRF window width in pos/neg direction
     tMaxIrf = 30*σ
     # evenly spaced time steps for convolution
+    # need one point after tMaxIrf in case interpolation is queried between final step and tMaxIrf
     tConv = getOdeTimeConstantStep(irfStep/2:irfStep:tMaxIrf+irfStep, μ, σ)[1]
 
     # time steps post convolution; shift post-irf time by -μ to 
     # evaluate correct points for original time vector in ODE
-    tPostConv = t[t .≥ tMaxIrf+irfStep] .- μ
+    tPostConv = t[t .≥ tMaxIrf] .- μ
     
     # combine irf and post-irf times in array for single call to ODE solver
     tOde = sort(unique([tConv; tPostConv]))
