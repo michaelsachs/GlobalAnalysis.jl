@@ -27,68 +27,105 @@ Goals of the GetData function:
     5. Generate a simulated 2D data matrix based on the simulated kinetics and spectra.
 """
 
-
-function GetData(param) # A, B, ..., μ, σ, k1, k2, k3
-    # Extract the number of states/components and rate constants from the kinetic model
-    num_states = length(states(rs)) # number of components
-    num_k = length(Catalyst.parameters(rs)) # number of rate constants
-    States = states(rs) # get components from kinetic model, A(t), B(t), C(t) ...
-
-    u0_ = OrderedDict{Symbol, Float64}() # initialize the component amplitude vector
-    for (i, state) in enumerate(States) # loop through the components A, B ... extracted from kinetic model
-        name = string(state)
-        name = match(r"(\w+)", name).captures[1]  # Extract alphanumeric part of the name, i.e. A rather than A(t)
-        u0_[Symbol(name)] = param[i] # assign the corresponding value from optimized param vector
+"""
+Assembles parameter dictionaries for ODE solver, drawing values from (i) fit 
+parameter vector `fitParam` for fit variables, (ii) the `bounds` dictionary if 
+the variable hasa fixed value, or (iii) a `default` value for variables which 
+are neither fitted nor supplied in `bounds`. `count` keeps track of how many 
+fit parameters have been assigned.
+"""
+function gatherParams(syms, fitParam, bounds, default, count)
+    p = Dict{Symbol,Float64}()
+    for sym in syms
+        if sym ∈ keys(bounds)
+            val = bounds[sym]
+            # fixed parameter
+            if length(val) == 1
+                if val isa Number
+                    p[sym] = val
+                elseif val isa Vector
+                    p[sym] = val[1]
+                end
+            # fit parameter
+            elseif length(val) == 2
+                count += 1
+                p[sym] = fitParam[count]
+            else
+                error("Bounds value for $(sym) must be
+                (a) a number if $(sym) is a fixed parameter, or
+                (b) a vector containing two numbers if $(sym) is a fit parameter")
+            end
+        # default parameter
+        else
+            p[sym] = default
+        end
     end
-    u0 = Pair{Symbol, Float64}[]
-    for (key, value) in pairs(u0_)
-        push!(u0, Pair(key, Float64(value))) 
-    end
-    u0 = collect(u0) # collect initial value vector for mapping onto parameters 
+    return p, count
+end
 
-    num_p = num_states + num_k + 2 # the number of parameters to optimize is the number of states + rate constants + μ + σ
-    
-    k_start = num_states + 3 # rate constants in parameter vector start after the states and μ and σ, i.e. num_states + 3
-    unsorted_k = ((param[k_start:num_p])) # rate constants, unsorted
+"""
+Returns species as a vector of symbols.
+"""
+function getSpecies(rn)
+    species = Catalyst.states(rn)
+    # species as strings
+    speciesStr = map(x->match(r"(\w+)",x).captures[1], string.(species))
+    # species as symbols
+    return Symbol.(speciesStr)
+end
 
-    # get the rate constants from the kinetic model, k1, k2, k3
-    Ks = Catalyst.parameters(rs)
-    p_ = OrderedDict{Symbol, Float64}()
+"""
+Returns parameters as a vector of symbols.
+"""
+function getParameters(rn)
+    rateConst = Catalyst.parameters(rn)
+    # rate constants as symbols
+    return Symbol.(rateConst)
+end
 
-    for (i, K) in enumerate(Ks) # loop through rate constants extracted from kinetic model
-        rate_const = string(K)
-        p_[Symbol(rate_const)] = unsorted_k[i]
-    end
 
-    p = Pair{Symbol, Float64}[]
-    for (key, value) in pairs(p_)
-        push!(p, Pair(key, Float64(value)))
-    end
-    collect(p) # collect rate constants into vector
+"""
+Generates test data by calculating kinetic traces based on time vector
+`t`, reaction network `rn`, and parameter vector `param`. `param` contains 
+parameters in order (1) initial state populations, (2) rate constants, 
+(3) IRF parameters.
+"""
+function simulateData(t, rn, param, bounds, Data)
+    species = getSpecies(rn)
+    # get populations at t = 0 
+    u0, count = gatherParams(species, param, bounds, 1, 0)
 
-    # IRF parameters
-    # first IRF parameter is after the component concentrations, i.e. after num_states
-    μ=param[num_states+1]
-    σ=param[num_states+2]
+    rateConst = getParameters(rn)
+    # get rate constants
+    ks, count = gatherParams(rateConst, param, bounds, NaN, count)
 
-    TimeODE, TimeIRFPos, IRFWindowCut, TimeODEBool = defineIRFTime(time, μ, σ)
-    tspan = [minimum(TimeODE),maximum(TimeODE)] 
+    # get Gaussian IRF parameters
+    irfParam, count = gatherParams([:μ,:σ], param, bounds, 0, count)
+    μ = irfParam[:μ]
+    σ = irfParam[:σ]
 
-    prob = ODEProblem(rs, u0, tspan, p; saveat=TimeODE)
-    sol  = solve(prob, Tsit5())
-    sol_array = Array(sol)
+    # make sure that all fit parameters have been distributed
+    @assert length(param) == count
 
-    # Perform convolution for each component
-    ConvKin = Vector{Array{Float64,1}}(undef, num_states)
-    for i in 1:num_states # loop through components
-        component = sol_array[i,:]
-        ConvKin[i] = convolveIRF(time, component, μ, σ, TimeIRFPos, IRFWindowCut, TimeODEBool)
-    end
+    # assemble time vector for ODE solver
+    tStepParam = getOdeTime(t, μ, σ)
+    tOde = tStepParam[1]
+    # time span for ODE solver
+    tspan = [minimum(tOde), maximum(tOde)] 
 
-    KinMatrix = reduce(vcat, ConvKin')  # kinetic matrix
-    TestSpec = Data / KinMatrix  # spectral signatures matrix
-    testData = TestSpec * KinMatrix # test matrix from kinetics and signatures
-    return testData, TestSpec, KinMatrix
+    # set up and solve ODEs
+    prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde)
+    sol  = solve(prob, ROS3P())
+    kin = transpose(Array(sol))
+
+    # convolve kinetic traces with IRF
+    kinConv = convolveIRF(t, kin, μ, σ, tStepParam)
+
+    # generate spectra based on calculated kinetics
+    testSpc = Data / kinConv'
+    # assemble data matrix 
+    testData = testSpc * kinConv'
+    return testData#, testSpc#, KinMatrix
 end
 
 
@@ -100,8 +137,8 @@ Goals of Objective function:
 """
 
 function Objective(param; output="res")
-    da = GetData(param)
-    testData = da[1]
+    da = simulateData(param)
+    testData = da#[1]
     if output == "res"
         return nansum((testData .- Data).^2) #sum(abs2, testData .- Data)
     elseif output == "map"
