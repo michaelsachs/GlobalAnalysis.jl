@@ -115,7 +115,7 @@ Generates test data by calculating kinetic traces based on time vector
 parameters in order (1) initial state populations, (2) rate constants, 
 (3) IRF parameters.
 """
-function simulateData(t, rn, param, limits, Data)
+function simulateData(t, rn, param, limits, Data; ret="res")
     species = getSpecies(rn)
     # get populations at t = 0 
     u0, count = gatherParams(species, param, limits, 1, 0)
@@ -140,17 +140,26 @@ function simulateData(t, rn, param, limits, Data)
 
     # set up and solve ODEs
     prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde)
-    sol  = solve(prob, ROS3P())
+    sol  = solve(prob, AutoTsit5(Rosenbrock23()))
     kin = transpose(Array(sol))
 
     # convolve kinetic traces with IRF
     kinConv = convolveIRF(t, kin, μ, σ, tStepParam)
 
+    # normalise kinetics for more consistent output
+    # kinConv ./= maximum(kinConv,dims=1)
+
     # generate spectra based on calculated kinetics
     testSpc = Data / kinConv'
     # assemble data matrix 
     testData = testSpc * kinConv'
-    return testData#, testSpc#, KinMatrix
+    #return testData#, testSpc#, KinMatrix
+    if ret == "res"
+        return nansum((testData .- Data).^2) 
+    else
+        return testData, testSpc, kinConv
+    end
+
 end
 
 
