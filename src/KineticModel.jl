@@ -1,14 +1,10 @@
-using Catalyst, Plots, DifferentialEquations
+using Catalyst
+using DifferentialEquations
 using BlackBoxOptim
-using CSV
-using DataFrames
-using DataStructures
-using Statistics
 using NaNStatistics
 
 include("IRFConvolution.jl")
-include("DataImport.jl")
-include("TypeDefinitions.jl")
+
 
 """
 In order to simulate the kinetic model, there is information that needs to be provided to the simulator in a specific format:
@@ -176,10 +172,10 @@ function Objective(param; output="res")
     if output == "res"
         return nansum((testData .- Data).^2) #sum(abs2, testData .- Data)
     elseif output == "map"
-        return heatmap(time, wavelength, (testData - Data), xlabel="Time", ylabel="Wavelength", 
-                    title="Residuals Map", colorbar_title="\n \n \n Δ Absorbance", 
-                    right_margin=15Plots.mm, left_margin=10Plots.mm, xguidefontsize=10, yguidefontsize=10,
-                    c = :thermal)
+        #return heatmap(time, wavelength, (testData - Data), xlabel="Time", ylabel="Wavelength", 
+        #            title="Residuals Map", colorbar_title="\n \n \n Δ Absorbance", 
+         #           right_margin=15Plots.mm, left_margin=10Plots.mm, xguidefontsize=10, yguidefontsize=10,
+        #            c = :thermal)
     end
 end
 
