@@ -29,7 +29,7 @@ Goals of the GetData function:
 
 """
 Generates upper and lower limits for fit parameters based on reaction
-network `rn` and `limits`.
+network `rn` and `limits`. 
 """
 function generateBounds(rn, limits)
     syms = [getSpecies(rn); getParameters(rn); :μ; :σ]
