@@ -176,6 +176,20 @@ function simulateData(t, rn, param, limits, Data; ret="res")
 
 end
 
+"""
+Parallel evaluation of `simulateData` for use with Metaheuristics.
+`param` is a 2D array, with dimension 1 corresponding to the number
+of parallel evaluations, and dimension 2 being the number of fit
+parameters.
+"""
+function simulateDataParallel(t, rn, param, limits, Data)
+    fitness = zeros(size(param,1))
+    Threads.@threads for n in 1:size(param,1)
+        fitness[n] = simulateData(t, rn, param[n,:], limits, Data; ret="res")
+    end
+    return fitness
+end
+
 
 """
 Goals of Objective function:
