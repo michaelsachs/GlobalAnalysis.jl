@@ -65,6 +65,19 @@ function generateBoundsBBO(rn, limits)
 
 end
 
+"""
+Generates upper and lower limits for fit parameters based on reaction
+network `rn` and `limits`, formatted for Metaheuristics. 
+"""
+function generateBoundsMH(rn, limits)
+
+    lower, upper = generateBounds(rn, limits)
+    bounds = [lower'; upper']
+
+    return bounds
+
+end
+
 
 """
 Assembles parameter dictionaries for ODE solver, drawing values from (i) fit 
