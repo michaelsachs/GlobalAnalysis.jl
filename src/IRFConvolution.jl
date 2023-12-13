@@ -178,8 +178,8 @@ of arbitrary reaction order.
 To convolve a kinetic traces with variable time spacing, the kinetic
 trace is calculated over an evenly spaced early time period and then
 interpolated back onto the early portion of the original `t` vector. 
-Later times, at whichthe effect of the instrument response is 
-negiligible, are appended tothe convolved data without convolution.
+Later times, at which the effect of the instrument response is 
+negiligible, are appended to the convolved data without convolution.
 """
 function convolveIrfVariableStep(t, kin, μ, σ, tSteps, tStepParam)
 
