@@ -47,6 +47,24 @@ function generateBounds(rn, limits)
     return lower, upper
 end
 
+"""
+Generates upper and lower limits for fit parameters based on reaction
+network `rn` and `limits`, formatted for BlackBoxOptim. 
+"""
+function generateBoundsBBO(rn, limits)
+
+    lower, upper = generateBounds(rn, limits)
+
+    # convert to array of tuples
+    bounds = Array{Tuple{Float64, Float64}}(undef,length(lower))
+    for k in eachindex(lower)
+        bounds[k] = (lower[k], upper[k])
+    end
+
+    return bounds
+
+end
+
 
 """
 Assembles parameter dictionaries for ODE solver, drawing values from (i) fit 
@@ -151,7 +169,7 @@ function simulateData(t, rn, param, limits, Data; ret="res")
     testData = testSpc * kinConv'
     #return testData#, testSpc#, KinMatrix
     if ret == "res"
-        return nansum((testData .- Data).^2) 
+        return nansum((testData .- Data).^2)
     else
         return testData, testSpc, kinConv
     end
