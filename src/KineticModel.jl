@@ -1,6 +1,5 @@
 using Catalyst
 using DifferentialEquations
-using BlackBoxOptim
 using NaNStatistics
 
 include("IRFConvolution.jl")
@@ -203,28 +202,3 @@ function simulateDataParallel(t, rn, param, limits, Data)
     return fitness
 end
 
-
-"""
-Goals of Objective function:
-    1. Read the simulated data matrix from GetData.
-    2. Compare simulated data to real data and return the sum of squared differences. 
-    3. Return a "residual map", if specified by the user. 
-"""
-
-function Objective(param; output="res")
-    da = simulateData(param)
-    testData = da#[1]
-    if output == "res"
-        return nansum((testData .- Data).^2) #sum(abs2, testData .- Data)
-    elseif output == "map"
-        #return heatmap(time, wavelength, (testData - Data), xlabel="Time", ylabel="Wavelength", 
-        #            title="Residuals Map", colorbar_title="\n \n \n Δ Absorbance", 
-         #           right_margin=15Plots.mm, left_margin=10Plots.mm, xguidefontsize=10, yguidefontsize=10,
-        #            c = :thermal)
-    end
-end
-
-# minimize objective function to optimize parameters
-function run_optim(obj, bound)
-    bboptimize(obj; SearchRange = bound)
-end
