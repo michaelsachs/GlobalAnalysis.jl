@@ -5,8 +5,8 @@ using Plots
 #----------------------------------------------------------------------
 
 # default fonts
-fo1 = font(10,"Helvetica")
-fo2 = font(12,"Helvetica")
+fo1 = font(9,"Helvetica")
+fo2 = font(11,"Helvetica")
 
 # set default plot parameters
 default(linewidth=2, grid=false, frame=:box, fg_legend=:transparent,
