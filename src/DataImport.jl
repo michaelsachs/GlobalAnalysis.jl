@@ -96,6 +96,8 @@ function importData(path)
         fileNames = readdir(path)
         # remove elements which do not end in .csv
         filter!(x->x[end-3:end]==".csv", fileNames)
+    else
+        error("$(path) is not a file or directory.")
     end
 
     X = []
