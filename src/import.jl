@@ -11,7 +11,7 @@ using StructArrays
 using Statistics
 using Interpolations
 
-include("TypeDefinitions.jl")
+include("types.jl")
 
 function dataOverlap(XPar)
     #bool for non-overlapping parts of vector

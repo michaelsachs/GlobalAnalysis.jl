@@ -2,7 +2,7 @@ using Catalyst
 using DifferentialEquations
 using NaNStatistics
 
-include("IRFConvolution.jl")
+include("irf.jl")
 
 
 """
