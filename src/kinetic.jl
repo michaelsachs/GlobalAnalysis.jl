@@ -202,3 +202,11 @@ function simulateDataParallel(t, rn, param, limits, Data)
     return fitness
 end
 
+"""
+Generates string array to label species in reaction network `rn`
+in plots.
+"""
+function getLabels(rn)
+    permutedims(string.(getSpecies(rn)))
+end
+
