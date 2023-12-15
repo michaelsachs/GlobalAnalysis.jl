@@ -1,15 +1,24 @@
+using Pkg
+pkg"activate .."
+push!(LOAD_PATH,"../src/")
+
 using Documenter
 using GlobalAnalysis
 
 makedocs(
     sitename = "GlobalAnalysis",
+    authors = "Michael Sachs and contributors.",
     format = Documenter.HTML(),
-    modules = [GlobalAnalysis]
+    modules = [GlobalAnalysis],
+
+    pages=[
+        "Home" => "index.md",
+        "Installation" => "installation.md",
+        "Data import" => "import.md",
+        "Kinetic model" => "kineticModel.md",
+    ],
 )
 
-# Documenter can also automatically deploy documentation to gh-pages.
-# See "Hosting Documentation" and deploydocs() in the Documenter manual
-# for more information.
-#=deploydocs(
-    repo = "<repository url>"
-)=#
+deploydocs(
+    repo = "github.com/michaelsachs/GlobalAnalysis.jl.git",
+)
