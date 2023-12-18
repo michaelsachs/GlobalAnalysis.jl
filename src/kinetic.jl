@@ -6,23 +6,6 @@ include("irf.jl")
 
 
 """
-In order to simulate the kinetic model, there is information that needs to be provided to the simulator in a specific format:
-    1. The initial condition, i.e. the amplitudes of each species/component at the beginning of the simulation. This is given as a vector u0.
-    2. Parameter values, i.e. the values of the rate constants. This is given as a vector p.
-    3. Time span for which we run the simulation. 
-
-Goals of the GetData function:
-    1. Extract all necessary information from the kinetic model defined in the first cell, i.e., the rate constants (k1, k2,...) and components (A, B,...).
-    2. Set up vectors u0 and p. 
-        a. Create an empty dictionary of the symbolic representations for each component, i.e. key = A, value = []
-        b. Do the same for the rate constants, i.e. key = k1, value = []
-        b. Map the corresponding values from the input param vector onto the elements in your dictionaries, i.e key = A, value = param[1] = 1
-    3. Simulate the kinetic model and convolve the resulting kinetic traces in order to represent the IRF.
-    4. Gererate spectral signatures based on these kinetic traces and the real input data.
-    5. Generate a simulated 2D data matrix based on the simulated kinetics and spectra.
-"""
-
-"""
 Generates upper and lower limits for fit parameters based on reaction
 network `rn` and `limits`. 
 """
