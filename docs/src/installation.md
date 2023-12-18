@@ -23,7 +23,7 @@ Download VS Code from <https://code.visualstudio.com/Download> and install it. N
 
 <img src="figures/julia_extension.jpg" alt="VS Code screenshot showing the Julia extension" width="250" />
 
-!["VS Code screenshot showing the Julia extension"](./figures/julia_extension.png)
+!["VS Code screenshot showing the Julia extension"](./figures/julia_extension.PNG)
 
 
 Finally, we will point VS Code to our Julia installation and enable multithreading. To this end, go to `File > Preferences > Settings` from the top menu bar in VS code. 
