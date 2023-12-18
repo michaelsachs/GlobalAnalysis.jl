@@ -13,30 +13,17 @@ Download VS Code from <https://code.visualstudio.com/Download> and install it. N
 
 <img src="./figures/julia_extension.PNG" alt="VS Code screenshot showing the Julia extension" width="250" >
 
+<img src="/figures/julia_extension.PNG" alt="VS Code screenshot showing the Julia extension" width="250" >
+
+<img src="figures/julia_extension.PNG" alt="VS Code screenshot showing the Julia extension" width="250" >
+
 <img src="./figures/julia_extension.PNG" alt="VS Code screenshot showing the Julia extension" width="250" />
 
 <img src="/figures/julia_extension.PNG" alt="VS Code screenshot showing the Julia extension" width="250" />
 
-![](./figures/julia_extension.PNG)
+<img src="figures/julia_extension.PNG" alt="VS Code screenshot showing the Julia extension" width="250" />
 
-<div align="center"> <img
-src="https://github.com/michaelsachs/GlobalAnalysis.jl/blob/main/docs/src/figures/julia_extension.PNG"
-alt="VS Code screenshot showing the Julia extension" width="250"></img> </div>
-
-<img src="https://github.com/michaelsachs/GlobalAnalysis.jl/blob/main/docs/src/figures/julia_extension.PNG" alt="VS Code screenshot showing the Julia extension" width=40% >
-
-```@raw html
-<p align="center">
-  <img src="https://github.com/michaelsachs/GlobalAnalysis.jl/blob/main/docs/src/figures/julia_extension.PNG" width="160px" hspace="20">
-  <img src="https://github.com/michaelsachs/GlobalAnalysis.jl/blob/main/docs/src/figures/julia_extension.PNG" width="160px" hspace="20">
-  <img src="https://github.com/michaelsachs/GlobalAnalysis.jl/blob/main/docs/src/figures/julia_extension.PNG" width="200px">
-</p>
-```
-[<img src="https://github.com/michaelsachs/GlobalAnalysis.jl/blob/main/docs/src/figures/julia_extension.PNG" width="200" />]
-
-[<img src="https://github.com/michaelsachs/GlobalAnalysis.jl/blob/main/docs/src/figures/julia_extension.PNG" width="200" />]
-
-[<img src="https://github.com/michaelsachs/GlobalAnalysis.jl/blob/main/docs/src/figures/julia_extension.PNG" width="200" />]
+!["VS Code screenshot showing the Julia extension"](./figures/julia_extension.PNG)
 
 
 Finally, we will point VS Code to our Julia installation and enable multithreading. To this end, go to `File > Preferences > Settings` from the top menu bar in VS code. 
