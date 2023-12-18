@@ -19,6 +19,12 @@ Download VS Code from <https://code.visualstudio.com/Download> and install it. N
 
 ![](./figures/julia_extension.PNG)
 
+<div align="center"> <img
+src="./figures/julia_extension.PNG"
+alt="VS Code screenshot showing the Julia extension" width="250"></img> </div>
+
+<img src="./figures/julia_extension.PNG" alt="VS Code screenshot showing the Julia extension" width=40% >
+
 
 
 
