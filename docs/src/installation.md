@@ -25,8 +25,18 @@ alt="VS Code screenshot showing the Julia extension" width="250"></img> </div>
 
 <img src="./figures/julia_extension.PNG" alt="VS Code screenshot showing the Julia extension" width=40% >
 
+```@raw html
+<p align="center">
+  <img src="./figures/julia_extension.PNG" width="160px" hspace="20">
+  <img src="figures/julia_extension.PNG" width="160px" hspace="20">
+  <img src="figures/julia_extension.PNG" width="200px">
+</p>
+```
+[<img src="docs/src/figures/julia_extension.PNG" width="200" />]
 
+[<img src="/figures/julia_extension.PNG" width="200" />]
 
+[<img src="./figures/julia_extension.PNG" width="200" />]
 
 Finally, we will point VS Code to our Julia installation and enable multithreading. To this end, go to `File > Preferences > Settings` from the top menu bar in VS code. 
 - **Executable path.** In the search bar, enter *julia executable*, which should bring up *Julia: Executable Path*. Here, paste the path you have noted during the Julia installation.
