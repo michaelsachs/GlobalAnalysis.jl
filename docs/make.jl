@@ -2,7 +2,7 @@ using Documenter
 using GlobalAnalysis
 
 makedocs(
-    sitename = "GlobalAnalysis",
+    sitename = "GlobalAnalysis.jl",
     authors = "Michael Sachs and contributors.",
     format = Documenter.HTML(),
     modules = [GlobalAnalysis],
@@ -14,11 +14,6 @@ makedocs(
         "Kinetic model" => "kineticModel.md",
     ],
 )
-
-#deploydocs(
-#    repo = "github.com/michaelsachs/GlobalAnalysis.jl.git",
-#)
-
 
 deploydocs(
     repo = "github.com/michaelsachs/GlobalAnalysis.jl.git",
