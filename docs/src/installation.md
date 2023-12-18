@@ -38,6 +38,7 @@ alt="VS Code screenshot showing the Julia extension" width="250"></img> </div>
 
 [<img src="https://github.com/michaelsachs/GlobalAnalysis.jl/blob/main/docs/src/figures/julia_extension.PNG" width="200" />]
 
+
 Finally, we will point VS Code to our Julia installation and enable multithreading. To this end, go to `File > Preferences > Settings` from the top menu bar in VS code. 
 - **Executable path.** In the search bar, enter *julia executable*, which should bring up *Julia: Executable Path*. Here, paste the path you have noted during the Julia installation.
 - **Mulithreading.** In the search bar, enter *julia threads*, which should bring up *Julia: Num Threads*. Click on *Edit in settings.json*. This step takes you to a file called *settings.json*, where you will find `"julia.NumThreads"` with some default value assigned. Replace the default value with the number of threads on your machine (typically twice the number of cores), if you know it; for example, `"julia.NumThreads": 16` for a machine with 8 cores. If you do not know this information, use `"julia.NumThreads": "auto"` to automatically detect how many threads to use.
