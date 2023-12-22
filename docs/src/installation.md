@@ -27,10 +27,9 @@ VS Code and Julia are now set up. To verify that everything is working, you can 
 
 !["VS Code screenshot showing the Julia extension"](./assets/clone_repo.png)
 
-- A windows appears at the top; paste `https://github.com/michaelsachs/GlobalAnalysis.jl` here
+- A window appears at the top; paste `https://github.com/michaelsachs/GlobalAnalysis.jl` here
 - A popup window asks where you want to save the repository folder. Pick any directory you like and click *Select as Repository Destination*
 - A popup asks whether you want to open the new repository. Click *Open*
-
 - Press `Ctrl + Shift + P` (Windows/Linux) / `Shift + Command + P` (Mac) to bring up the command palette, and look for `Julia: Start REPL`
 - Press `]` to switch to the package manager 
 - Type `instantiate` and press enter. This will download and precompile all required packages, which may take a few minutes
