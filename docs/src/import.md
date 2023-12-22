@@ -15,7 +15,7 @@ Data is read from .csv files using `importData(path)`, where `path` can point ei
 - If `path` points to a folder, all .csv files contained in it are imported
 - If `path` points to a .csv file, only this file is imported
 
-In both cases, `importData` returns a [StructArray](https://juliaarrays.github.io/StructArrays.jl/stable/), containing one or more elements depending on how many .csv files were imported, which can be accessed as follows:
+In both cases, `importData` returns a [StructArray](https://juliaarrays.github.io/StructArrays.jl/stable/), containing one or more elements depending on how many .csv files were imported. The imported data can be accessed as follows:
 
 ```julia
 # define .csv file containing experimental data

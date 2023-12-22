@@ -20,8 +20,20 @@ Finally, we will point VS Code to our Julia installation and enable multithreadi
 VS Code and Julia are now set up. To verify that everything is working, you can press `Ctrl + Shift + P` (Windows/Linux) / `Shift + Command + P` (Mac) to bring up the command palette, and look for `Julia: Start REPL`. Selecting this option will bring up Julia's terminal within VS Code, indicated by the appearance of a green `julia>`. You can enter a simple command like `1 + 2`, which should return the expected result.
 
 
-## Installing GlobalAnalysis.jl
+## Setting up GlobalAnalysis.jl
 
 
+- Go to *Source Control* in the left menu bar and click *Clone Repository*. If *Clone Repository* is not available, you will be prompted to *Download Git*, which is required to work with repositories: follow the shown link and download and install *Git* - during the installation process, you can keep the default selected options. After restarting VS Code, *Clone Repository* should be available.
 
-Now, press `[` to switch to the package manager
+!["VS Code screenshot showing the Julia extension"](./figures/clone_repo.png)
+
+- A windows appears at the top; paste `https://github.com/michaelsachs/GlobalAnalysis.jl` here
+- A popup window asks where you want to save the repository folder. Pick any directory you like and click *Select as Repository Destination*
+- A popup asks whether you want to open the new repository. Click *Open*
+
+- Press `Ctrl + Shift + P` (Windows/Linux) / `Shift + Command + P` (Mac) to bring up the command palette, and look for `Julia: Start REPL`
+- Press `]` to switch to the package manager 
+- Type `instantiate` and press enter. This will download and precompile all required packages, which may take a few minutes
+- In the file explorer (top icon in the left menu bar), navigate to the `notebooks` folder and select the notebook you want to run
+- For example, select `kineticModel.ipynb` an click `Run all` to ensure everything is working. If you are prompted to choose a kernel, select `Julia` and then the Julia version you have installed in the previous step
+
