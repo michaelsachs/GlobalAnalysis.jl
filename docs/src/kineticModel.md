@@ -45,7 +45,7 @@ tspan = [0, 100]
 
 After solving the differential equations generated from the reaction network we obtain the following reaction kinetics, showing the temporal evolution of the individual species' concentrations:
 
-![Alt text](./figures/Michaelis_menten_kinetics.svg)
+![Alt text](./assets/Michaelis_menten_kinetics.svg)
 
 Some further examples of how to set up reaction networks can be found in the *Examples* section below. More detailed information is available in the [documentation of *Catalyst.jl*](https://docs.sciml.ai/Catalyst/stable/catalyst_functionality/dsl_description/).
 
@@ -82,7 +82,7 @@ The global analysis procedure involves the following steps:
 
 To illustrate the use of different kinetic models, we look at examples where we recover spectral signatures from synthetic data. For the purpose of these examples, we generate data comprising three different species. We first generate spectral signatures for our synthetic species, representing positive, negative, and mixed positive/negative signatures:
 
-![Alt text](./figures/Synthetic_spectral_signatures.svg)
+![Alt text](./assets/Synthetic_spectral_signatures.svg)
 
 ## Example: First-order sequential model
 
@@ -120,11 +120,11 @@ Next we choose initial amplitudes, rate constants, and instrument response funct
 ```
 From these parameters, we obtain the following kinetic traces:
 
-![Alt text](./figures/Synthetic_first_order_kinetics.svg)
+![Alt text](./assets/Synthetic_first_order_kinetics.svg)
 
 By matrix multiplying spectral signatures and kinetic traces, we generate a 2D dataset, which is the sum of the temporal evolutions of all three spectral components. In addition, some noise is added to replicate experimental conditions more closely. This dataset can be found in `\data\testData_first_order_seq.csv`.
 
-![Alt text](./figures/Synthetic_first_order_data.svg)
+![Alt text](./assets/Synthetic_first_order_data.svg)
 
 ### Global fit
 
@@ -149,7 +149,7 @@ limits = Dict(
 
 To run the global fit, we define the maximum number of iterations in the fit, for example `maxIter = 200` for 200 iterations, and then run the optimization routine. To judge whether an optimal solution has been found, we can monitor the convergence of the fit. Here, the chosen number of iterations resulted in 2000 function evaluations with no changes for the second half of those evaluations, which is a good indication that the fit has converged.
 
-![Alt text](./figures/First_order_convergence.svg)
+![Alt text](./assets/First_order_convergence.svg)
 
 The fit returns the following parameters, demonstrating that the input parameters have been recovered successfully. Returned parameters are in the order of rate constants and then IRF parameters, e.g. in this case `k1`, `k2`, `k3`, `μ`, `σ`.
 
@@ -162,11 +162,11 @@ The fit returns the following parameters, demonstrating that the input parameter
 ```
 The optimized kinetics are essentially identical to the input above:
 
-![Alt text](./figures/First_order_fit_kinetics.svg)
+![Alt text](./assets/First_order_fit_kinetics.svg)
 
 The optimized spectra closely resemble the input, except for the noise added to the synthetic dataset:
 
-![Alt text](./figures/First_order_fit_spectra.svg)
+![Alt text](./assets/First_order_fit_spectra.svg)
 
 
 ## Example: Mixed-order parallel model
@@ -205,11 +205,11 @@ Dict(
 
 This reaction network and parameters yield the following kinetic traces:
 
-![Alt text](./figures/Synthetic_mixed_order_kinetics.svg)
+![Alt text](./assets/Synthetic_mixed_order_kinetics.svg)
 
 We use the same spectral signatures as above to generate a synthetic 2D dataset, again with added noise. The resulting dataset can be found in `\data\testData_mixed_order_par.csv`.
 
-![Alt text](./figures/Synthetic_mixed_order_data.svg)
+![Alt text](./assets/Synthetic_mixed_order_data.svg)
 
 
 ### Global fit
@@ -231,15 +231,15 @@ limits = Dict(
 
 With `maxIter = 300`, we achieve a satisfactory convergence:
 
-![Alt text](./figures/Mixed_order_convergence.svg)
+![Alt text](./assets/Mixed_order_convergence.svg)
 
 The input kinetics are recovered reliably:
 
-![Alt text](./figures/Mixed_order_fit_kinetics.svg)
+![Alt text](./assets/Mixed_order_fit_kinetics.svg)
 
 Similarly, the spectral signatures are recovered, with an additional scaling factor arising from a normalization of the 2D data to keep the amplitudes in the data comparable to the first order example.
 
-![Alt text](./figures/Mixed_order_fit_spectra.svg)
+![Alt text](./assets/Mixed_order_fit_spectra.svg)
 
 
 ## Fixed parameters

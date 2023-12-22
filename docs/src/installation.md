@@ -11,7 +11,7 @@ A convenient way to take advantage of Julia's multithreading capabilities in Jup
 
 Download VS Code from <https://code.visualstudio.com/Download> and install it. Next, we will install the Julia extension in VS Code. Start VS Code and click on *Extensions* in the left menu bar. Search for *julia* and then click to install the official extension:
 
-!["VS Code screenshot showing the Julia extension"](./figures/julia_extension.PNG)
+!["VS Code screenshot showing the Julia extension"](./assets/julia_extension.PNG)
 
 Finally, we will point VS Code to our Julia installation and enable multithreading. To this end, go to `File > Preferences > Settings` from the top menu bar in VS code. 
 - **Executable path.** In the search bar, enter *julia executable*, which should bring up *Julia: Executable Path*. Here, paste the path you have noted during the Julia installation.
@@ -25,7 +25,7 @@ VS Code and Julia are now set up. To verify that everything is working, you can 
 
 - Go to *Source Control* in the left menu bar and click *Clone Repository*. If *Clone Repository* is not available, you will be prompted to *Download Git*, which is required to work with repositories: follow the shown link and download and install *Git* - during the installation process, you can keep the default selected options. After restarting VS Code, *Clone Repository* should be available.
 
-!["VS Code screenshot showing the Julia extension"](./figures/clone_repo.png)
+!["VS Code screenshot showing the Julia extension"](./assets/clone_repo.png)
 
 - A windows appears at the top; paste `https://github.com/michaelsachs/GlobalAnalysis.jl` here
 - A popup window asks where you want to save the repository folder. Pick any directory you like and click *Select as Repository Destination*
