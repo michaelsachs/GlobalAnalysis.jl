@@ -10,7 +10,7 @@ makedocs(
     pages=[
         "Home" => "index.md",
         "Installation" => "installation.md",
-        "Data import" => "import.md",
+        "Data format" => "import.md",
         "Kinetic model" => "kineticModel.md",
     ],
 )

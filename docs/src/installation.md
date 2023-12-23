@@ -25,7 +25,7 @@ VS Code and Julia are now set up. To verify that everything is working, you can 
 
 - Go to *Source Control* in the left menu bar and click *Clone Repository*. If *Clone Repository* is not available, you will be prompted to *Download Git*, which is required to work with repositories: follow the shown link and download and install *Git* - during the installation process, you can keep the default selected options. After restarting VS Code, *Clone Repository* should be available.
 
-!["VS Code screenshot showing the Julia extension"](./assets/clone_repo.png)
+!["VS Code screenshot showing the clone repo dialogue"](./assets/clone_repo.png)
 
 - A window appears at the top; paste `https://github.com/michaelsachs/GlobalAnalysis.jl` here
 - A popup window asks where you want to save the repository folder. Pick any directory you like and click *Select as Repository Destination*
@@ -35,4 +35,5 @@ VS Code and Julia are now set up. To verify that everything is working, you can 
 - Type `instantiate` and press enter. This will download and precompile all required packages, which may take a few minutes
 - In the file explorer (top icon in the left menu bar), navigate to the `notebooks` folder and select the notebook you want to run
 - For example, select `kineticModel.ipynb` an click `Run all` to ensure everything is working. If you are prompted to choose a kernel, select `Julia` and then the Julia version you have installed in the previous step
+- Note that the first execution of Julia code after opening a notebook will trigger the compilation of the used functions, which can take a few seconds. The second excecution onwards then takes advantage of the compilation and will be much faster. The compilation is retained until the notebook is closed.
 
