@@ -1,6 +1,6 @@
 module GlobalAnalysis
 
-#export importData, defineIRFTime, convolveIRF, maskData, jupyterNotebook, jupyterLab
+export getOdeTime, convolveIRF
 #export jupyterNotebook, jupyterLab
 
 #include("TypeDefinitions.jl")
