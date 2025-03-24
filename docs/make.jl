@@ -12,6 +12,7 @@ makedocs(
         "Installation" => "installation.md",
         "Data format" => "import.md",
         "Kinetic model" => "kineticModel.md",
+        "API" => "api.md",
     ],
 )
 
