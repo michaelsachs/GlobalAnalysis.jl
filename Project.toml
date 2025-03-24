@@ -1,7 +1,7 @@
 name = "GlobalAnalysis"
 uuid = "0697fe54-52cc-445b-8059-c053b5e91f02"
 authors = ["Michael Sachs"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 BlackBoxOptim = "a134a8b2-14d6-55f6-9291-3336d3ab0209"
@@ -27,7 +27,7 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
-julia = "1.9"
+julia = "1.9 - 1.11"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

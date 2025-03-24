@@ -101,7 +101,7 @@ end
 Returns species as a vector of symbols.
 """
 function getSpecies(rn)
-    species = Catalyst.states(rn)
+    species = Catalyst.unknowns(rn)
     # species as strings
     speciesStr = map(x->match(r"(\w+)",x).captures[1], string.(species))
     # species as symbols
