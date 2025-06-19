@@ -72,8 +72,8 @@ The global analysis procedure involves the following steps:
 1. **Choose a kinetic model.** Use the `@reaction_network` macro to define a kinetic model.
 1. **Generate kinetic traces.** Differential equations are generated from the reaction network and solved numerically.
 1. **IRF convolution.** The kinetic traces are convolved with a Gaussian instrument response. 
-1. **Recover spectral signatures.** The spectral signature for each simulated kinetic trace are produced from the experimental data using matrix division.
-1. **Iterative optimization.** Parameters, rate constants, and instrument response parameters are varied iteratively to maximise the fit between simulated and experimental data.
+1. **Recover spectral signatures.** The spectral signatures corresponding to the simulated kinetic traces are produced from the experimental data using matrix division.
+1. **Iterative optimization.** Parameters, rate constants, and instrument response parameters are varied iteratively within the ranges defined in `limits` to maximise the fit between simulated and experimental data.
 1. **Refine kinetic model.** Tune the kinetic model based on physical intuition and fit quality.
 
 

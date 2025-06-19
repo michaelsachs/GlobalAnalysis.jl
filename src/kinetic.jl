@@ -29,6 +29,7 @@ function generateBounds(rn, limits)
     return lower, upper
 end
 
+
 """
 Generates upper and lower limits for fit parameters based on reaction
 network `rn` and `limits`, formatted for BlackBoxOptim. 
@@ -46,6 +47,7 @@ function generateBoundsBBO(rn, limits)
     return bounds
 
 end
+
 
 """
 Generates upper and lower limits for fit parameters based on reaction
@@ -97,6 +99,7 @@ function gatherParams(syms, fitParam, limits, default, count)
     return p, count
 end
 
+
 """
 Returns species as a vector of symbols.
 """
@@ -107,6 +110,7 @@ function getSpecies(rn)
     # species as symbols
     return Symbol.(speciesStr)
 end
+
 
 """
 Returns parameters as a vector of symbols.
@@ -124,7 +128,7 @@ Generates test data by calculating kinetic traces based on time vector
 parameters in order (1) initial state populations, (2) rate constants, 
 (3) IRF parameters.
 """
-function simulateData(t, rn, param, limits, Data; ret="res")
+function paramToData(t, rn, param, limits, Data)
     species = getSpecies(rn)
     # get populations at t = 0 
     u0, count = gatherParams(species, param, limits, 1, 0)
@@ -155,35 +159,50 @@ function simulateData(t, rn, param, limits, Data; ret="res")
     # convolve kinetic traces with IRF
     kinConv = convolveIRF(t, kin, μ, σ, tStepParam)
 
-    # normalise kinetics for more consistent output
-    # kinConv ./= maximum(kinConv,dims=1)
-
     # generate spectra based on calculated kinetics
     testSpc = Data / kinConv'
     # assemble data matrix 
     testData = testSpc * kinConv'
-    #return testData#, testSpc#, KinMatrix
-    if ret == "res"
-        return nansum((testData .- Data).^2)
-    else
-        return testData, testSpc, kinConv
-    end
+
+    return testData, testSpc, kinConv
 
 end
 
+
 """
-Parallel evaluation of `simulateData` for use with Metaheuristics.
+Returns 2D matrix of residuals, calculated by subtracting the simulated 
+matrix from the experimental one.
+"""
+function paramToResiduals(t, rn, param, limits, Data)
+    testData, _, _ = paramToData(t, rn, param, limits, Data)
+    return testData .- Data
+end
+
+
+"""
+Returns sum of squared residuals between simulated and experimental
+data. Used for parameter optimization.
+"""
+function paramToSSR(t, rn, param, limits, Data)
+    res = paramToResiduals(t, rn, param, limits, Data)
+    return nansum((res).^2)
+end
+
+
+"""
+Parallel evaluation of `paramToSSR` for use with Metaheuristics.
 `param` is a 2D array, with dimension 1 corresponding to the number
 of parallel evaluations, and dimension 2 being the number of fit
 parameters.
 """
-function simulateDataParallel(t, rn, param, limits, Data)
-    fitness = zeros(size(param,1))
+function paramToSSRParallel(t, rn, param, limits, Data)
+    ssr = zeros(size(param,1))
     Threads.@threads for n in 1:size(param,1)
-        fitness[n] = simulateData(t, rn, param[n,:], limits, Data; ret="res")
+        ssr[n] = paramToSSR(t, rn, param[n,:], limits, Data)
     end
-    return fitness
+    return ssr
 end
+
 
 """
 Generates string array to label species in reaction network `rn`
