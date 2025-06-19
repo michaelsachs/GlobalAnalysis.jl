@@ -263,11 +263,13 @@ function getParamConfidence(t, rn, paramOpt, limits, Data; confidenceLevel=0.95)
     # calculate R-inverse
     Rinv = LinearAlgebra.inv(R)
 
-    # The diagonal of Rinv gives the variance-like term for
-    # each parameter
-    diagonal = nansum(Rinv .^ 2, dim=2)
-    # full parameter variances
-    v = diagonal * (ssr / dof)
+    # calculate noise-variance estimate
+    σ² = ssr / dof
+    # calculate full variance–covariance matrix
+    cov = σ² * (Rinv * Rinv')
+    # get full parameter variances
+    v = diag(cov)
+
     # standard error for each parameter; one-sigma (68%) 
     stError = sqrt.(v)
 
