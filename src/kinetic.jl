@@ -1,6 +1,9 @@
 using Catalyst
 using DifferentialEquations
 using NaNStatistics
+using Distributions
+using FiniteDiff
+using LinearAlgebra
 
 include("irf.jl")
 
@@ -180,6 +183,16 @@ end
 
 
 """
+Returns vector of residuals by flattening the output of `paramToResiduals`.
+Used for jacobian calculation.
+"""
+function paramToResidualsVec(t, rn, param, limits, Data)
+    res = paramToResiduals(t, rn, param, limits, Data)
+    return vec(res)
+end
+
+
+"""
 Returns sum of squared residuals between simulated and experimental
 data. Used for parameter optimization.
 """
@@ -211,4 +224,65 @@ in plots.
 function getLabels(rn)
     permutedims(string.(getSpecies(rn)))
 end
+
+
+"""
+Returns the half-widths `halfCI` of the two-sided confidence intervals for the
+best-fit parameter vector `paramOpt`.  The interval for each parameter is
+
+    paramOpt[i] ± halfCI[i]
+
+and is expected to contain the true value in roughly `confidenceLevel*100%`  
+of repeated experiments (e.g. `confidenceLevel=0.95` → 95% confidence interval).
+
+Uncertainties are computed from the QR-based Gaussian approximation.
+"""
+function getParamConfidence(t, rn, paramOpt, limits, Data; confidenceLevel=0.95)
+
+    resVec = paramToResidualsVec(t, rn, paramOpt, limits, Data)
+    # number of observation (time x energy)
+    numObs = length(resVec)
+    # degrees of freedom
+    dof = numObs-length(paramOpt)
+    # sum of squared residuals
+    ssr = nansum(resVec.^2)
+
+    # make sure that we have more observables than parameters (ensure 
+    # tall-matrix Jacobian, without which R is not invertible)
+    if dof ≤ 0
+        error("The number of parameters exceeds the number of observables.")
+    end
+
+    # calculate the jacobian matrix
+    J = FiniteDiff.finite_difference_jacobian(
+            p->paramToResidualsVec(t, rn, p, limits, Data), paramOpt)
+    # perform QR decomposition
+    F = LinearAlgebra.qr(J)
+    # get upper triangular matrix R
+    R = F.R
+    # calculate R-inverse
+    Rinv = LinearAlgebra.inv(R)
+
+    # The diagonal of Rinv gives the variance-like term for
+    # each parameter
+    diagonal = nansum(Rinv .^ 2, dim=2)
+    # full parameter variances
+    v = diagonal * (ssr / dof)
+    # standard error for each parameter; one-sigma (68%) 
+    stError = sqrt.(v)
+
+    # two-sided tail area (e.g. 0.025 for 95%)
+    α = (1-confidenceLevel)/2
+    # Student-t critical value for those tails
+    tScore = quantile(TDist(dof), 1 - α)
+    # half-width of the (1–α) confidence interval
+    halfCI = tScore .* stError
+
+    return halfCI
+
+end
+
+
+
+
 
