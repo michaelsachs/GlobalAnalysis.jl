@@ -4,6 +4,7 @@ using NaNStatistics
 using Distributions
 using FiniteDiff
 using LinearAlgebra
+using MonteCarloMeasurements
 
 include("irf.jl")
 
@@ -74,7 +75,7 @@ are neither fitted nor supplied in `limits`. `count` keeps track of how many
 fit parameters have been assigned.
 """
 function gatherParams(syms, fitParam, limits, default, count)
-    p = Dict{Symbol,Float64}()
+    p = Dict{Symbol,eltype(fitParam)}()
     for sym in syms
         if sym ∈ keys(limits)
             val = limits[sym]
@@ -156,7 +157,15 @@ function paramToData(t, rn, param, limits, Data)
 
     # set up and solve ODEs
     prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde)
-    sol  = solve(prob, AutoTsit5(Rosenbrock23()))
+
+    # switch solver depending on data type
+    if eltype(param) isa Float64
+        sol  = solve(prob, AutoTsit5(Rosenbrock23()))
+    else
+        # for MonteCarloMeasurements
+        sol  = solve(prob,  Rosenbrock23(autodiff=AutoFiniteDiff()))
+    end
+
     kin = transpose(Array(sol))
 
     # convolve kinetic traces with IRF
@@ -280,7 +289,30 @@ function getParamConfidence(t, rn, paramOpt, limits, Data; confidenceLevel=0.95)
     # half-width of the (1–α) confidence interval
     halfCI = tScore .* stError
 
-    return halfCI
+    return halfCI, cov
+
+end
+
+
+"""
+Calculates confidence intervals on kinetics and spectra obtained from optimized parameters
+using Monte Carlo sampling. `samples` is the number of Monte Carlo samples and 
+`confidenceLevel` is the desired confidence level.
+"""
+function paramToDataCI(t, rn, paramOpt, limits, Data; samples=200, confidenceLevel=0.95)
+
+    # get parameter covariance matrix at the desired confidence level
+    _,cov = getParamConfidence(t, rn, paramOpt, limits, Data; confidenceLevel=confidenceLevel)
+
+    # create a multivariate normal distribution
+    sampler = MvNormal(paramOpt, cov)
+    # vector of particle objects
+    particles = StaticParticles(samples, sampler)
+
+    # propagate particles through the forward model
+    fitData,fitSpc,fitKin = paramToData(t, rn, particles, limits, Data)
+
+    return fitData,fitSpc,fitKin
 
 end
 

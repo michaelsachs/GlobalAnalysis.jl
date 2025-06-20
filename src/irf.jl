@@ -92,6 +92,14 @@ standard deviation `σ`, and automatically taking care of
 `t` spacing. 
 """
 function getOdeTime(t, μ, σ)
+
+    # use mean for MonteCarloMeasurements (Particles cause errors
+    # with ranges)
+    if μ isa AbstractParticles       
+        μ = pmean(μ)
+        σ = pmean(σ)
+    end
+
     tSteps = getTimeSteps(t)
 
     # constant time spacing
