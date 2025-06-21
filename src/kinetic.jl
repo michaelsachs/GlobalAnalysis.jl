@@ -68,43 +68,6 @@ end
 
 
 """
-Assembles parameter dictionaries for ODE solver, drawing values from (i) fit 
-parameter vector `fitParam` for fit variables, (ii) the `limits` dictionary if 
-the variable has a fixed value, or (iii) a `default` value for variables which 
-are neither fitted nor supplied in `limits`. `count` keeps track of how many 
-fit parameters have been assigned.
-"""
-function gatherParams(syms, fitParam, limits, default, count)
-    p = Dict{Symbol,eltype(fitParam)}()
-    for sym in syms
-        if sym ∈ keys(limits)
-            val = limits[sym]
-            # fixed parameter
-            if length(val) == 1
-                if val isa Number
-                    p[sym] = val
-                elseif val isa Vector
-                    p[sym] = val[1]
-                end
-            # fit parameter
-            elseif length(val) == 2
-                count += 1
-                p[sym] = fitParam[count]
-            else
-                error("Bounds value for $(sym) must be
-                (a) a number if $(sym) is a fixed parameter, or
-                (b) a vector containing two numbers if $(sym) is a fit parameter")
-            end
-        # default parameter
-        else
-            p[sym] = default
-        end
-    end
-    return p, count
-end
-
-
-"""
 Returns species as a vector of symbols.
 """
 function getSpecies(rn)
@@ -127,30 +90,114 @@ end
 
 
 """
+    setupVariables(rn, limits)
+
+Pre-process the reaction network once and return everything the
+optimiser and forward model need.
+
+Inputs
+------
+* `rn`: Catalyst reaction network  
+* `limits`  
+  * `[:x] => v`         # fixed at value v
+  * `[:x] => [lo, hi]`  # fitted, bounded lo-hi
+
+Outputs
+-------
+* `syms` : all variables in a fixed order: `[species; rateConstants; μ; σ]`
+* `fitBounds` : lower/upper bounds for the free parameters, in the exact 
+order the optimiser will see them.
+* `odeHelpers` : 3-element vector containing only numeric data that
+  will be reused safely in every thread:
+
+  1. `paramTempl` — complete parameter vector with fixed variables
+     inserted and zeros for fitted variables.
+  2. `fitIdx`     — a 3-element vector of vectors:  
+     `fitIdx[1]` fitted-species indices,  
+     `fitIdx[2]` fitted-rate-constant indices,  
+     `fitIdx[3]` fitted-IRF indices.
+  3. `idxRanges`  — the three contiguous index ranges that correspond to
+     *all* species, rate constants, and IRF parameters respectively.
+
+Notes
+-----
+* All dictionary look-ups and symbol handling are done here, once,
+  so the threaded objective works purely with numeric vectors and
+  thread-safe `remake`.
+"""
+function setupVariables(rn, limits)
+
+    species = getSpecies(rn)
+    rateConst = getParameters(rn)
+    irfParam = [:μ; :σ]
+
+    syms = [species; rateConst; irfParam]
+    # parameter template with values for fixed variables and 
+    # zeroes for fit variables
+    paramTempl = zeros(Float64, length(syms))
+    # true indicates that variable is fitted
+    fitMask = falses(length(syms))
+    # gather fit bounds
+    fitBounds = []
+
+    for (n,sym) in pairs(syms)
+        if haskey(limits, sym)
+            val = limits[sym]
+            # fixed variable
+            if length(val) == 1
+                paramTempl[n] = val
+            # fit variable
+            elseif length(val) == 2
+                fitMask[n] = true
+                push!(fitBounds, [val...])
+            else
+                error("Bounds value for $(sym) must be
+                (a) a number if $(sym) is a fixed parameter, or
+                (b) a vector containing two numbers if $(sym) is a fit parameter")
+            end
+        else
+            error("Variable $(sym) is part of reaction network but missing in limits dictionary")
+        end
+    end
+
+    # transforms bounds into nx2 array
+    fitBounds = permutedims(hcat(fitBounds...))
+    # indices for fit variables
+    fitIdx = findall(fitMask)
+
+    lengths = length.([species, rateConst, irfParam])
+    # starting indices
+    firsts = cumsum(vcat(1, lengths[1:end-1]))
+    # index ranges for each component
+    idxRanges = [s:(s+l-1) for (s,l) in zip(firsts, lengths)]
+    # indices of fitted variables for each component 
+    fitIdx = [ [i for i in grp if fitMask[i]]  for grp in idxRanges ]
+
+    return syms, fitBounds, [paramTempl, fitIdx, idxRanges]
+
+end
+
+
+"""
 Generates test data by calculating kinetic traces based on time vector
 `t`, reaction network `rn`, and parameter vector `param`. `param` contains 
 parameters in order (1) initial state populations, (2) rate constants, 
 (3) IRF parameters.
 """
-function paramToData(t, rn, param, limits, Data)
-    species = getSpecies(rn)
-    # get populations at t = 0 
-    u0, count = gatherParams(species, param, limits, 1, 0)
+function paramToData(t, param, Data, odeHelpers)
 
-    rateConst = getParameters(rn)
-    # get rate constants
-    ks, count = gatherParams(rateConst, param, limits, NaN, count)
+    # split helper array into components
+    paramTempl, fitIdx, idxRanges = odeHelpers
 
-    # get Gaussian IRF parameters
-    irfParam, count = gatherParams([:μ,:σ], param, limits, 0, count)
-    μ = irfParam[:μ]
-    σ = irfParam[:σ]
-
-    # make sure that all fit parameters have been distributed
-    @assert length(param) == count
+    # make a copy of the template
+    _paramTempl = copy(paramTempl)
+    # fill fit parameters into template
+    @inbounds _paramTempl[vcat(fitIdx...)] .= param
+    # distribute parameters from template
+    u0, ks, irf = view.(Ref(_paramTempl), idxRanges)
 
     # assemble time vector for ODE solver
-    tStepParam = getOdeTime(t, μ, σ)
+    tStepParam = getOdeTime(t, irf...)
     tOde = tStepParam[1]
     # time span for ODE solver
     tspan = [minimum(tOde), maximum(tOde)] 
@@ -169,7 +216,7 @@ function paramToData(t, rn, param, limits, Data)
     kin = transpose(Array(sol))
 
     # convolve kinetic traces with IRF
-    kinConv = convolveIRF(t, kin, μ, σ, tStepParam)
+    kinConv = convolveIRF(t, kin, irf..., tStepParam)
 
     # generate spectra based on calculated kinetics
     testSpc = Data / kinConv'
@@ -185,8 +232,8 @@ end
 Returns 2D matrix of residuals, calculated by subtracting the simulated 
 matrix from the experimental one.
 """
-function paramToResiduals(t, rn, param, limits, Data)
-    testData, _, _ = paramToData(t, rn, param, limits, Data)
+function paramToResiduals(t, param, Data, odeHelpers)
+    testData, _, _ = paramToData(t, param, Data, odeHelpers)
     return testData .- Data
 end
 
@@ -195,8 +242,8 @@ end
 Returns vector of residuals by flattening the output of `paramToResiduals`.
 Used for jacobian calculation.
 """
-function paramToResidualsVec(t, rn, param, limits, Data)
-    res = paramToResiduals(t, rn, param, limits, Data)
+function paramToResidualsVec(t, param, Data, odeHelpers)
+    res = paramToResiduals(t, param, Data, odeHelpers)
     return vec(res)
 end
 
@@ -205,8 +252,8 @@ end
 Returns sum of squared residuals between simulated and experimental
 data. Used for parameter optimization.
 """
-function paramToSSR(t, rn, param, limits, Data)
-    res = paramToResiduals(t, rn, param, limits, Data)
+function paramToSSR(t, param, Data, odeHelpers)
+    res = paramToResiduals(t, param, Data, odeHelpers)
     return nansum((res).^2)
 end
 
@@ -217,10 +264,10 @@ Parallel evaluation of `paramToSSR` for use with Metaheuristics.
 of parallel evaluations, and dimension 2 being the number of fit
 parameters.
 """
-function paramToSSRParallel(t, rn, param, limits, Data)
+function paramToSSRParallel(t, param, Data, odeHelpers)
     ssr = zeros(size(param,1))
     Threads.@threads for n in 1:size(param,1)
-        ssr[n] = paramToSSR(t, rn, param[n,:], limits, Data)
+        ssr[n] = paramToSSR(t, param[n,:], Data, odeHelpers)
     end
     return ssr
 end
@@ -246,9 +293,9 @@ of repeated experiments (e.g. `confidenceLevel=0.95` → 95% confidence interval
 
 Uncertainties are computed from the QR-based Gaussian approximation.
 """
-function getParamConfidence(t, rn, paramOpt, limits, Data; confidenceLevel=0.95)
+function getParamConfidence(t, param, Data, odeHelpers; confidenceLevel=0.95)
 
-    resVec = paramToResidualsVec(t, rn, paramOpt, limits, Data)
+    resVec = paramToResidualsVec(t, param, Data, odeHelpers)
     # number of observation (time x energy)
     numObs = length(resVec)
     # degrees of freedom
@@ -264,7 +311,7 @@ function getParamConfidence(t, rn, paramOpt, limits, Data; confidenceLevel=0.95)
 
     # calculate the jacobian matrix
     J = FiniteDiff.finite_difference_jacobian(
-            p->paramToResidualsVec(t, rn, p, limits, Data), paramOpt)
+            p->paramToResidualsVec(t, p, Data, odeHelpers), paramOpt)
     # perform QR decomposition
     F = LinearAlgebra.qr(J)
     # get upper triangular matrix R
@@ -299,10 +346,10 @@ Calculates confidence intervals on kinetics and spectra obtained from optimized 
 using Monte Carlo sampling. `samples` is the number of Monte Carlo samples and 
 `confidenceLevel` is the desired confidence level.
 """
-function paramToDataCI(t, rn, paramOpt, limits, Data; samples=200, confidenceLevel=0.95)
+function paramToDataCI(t, param, Data, odeHelpers; samples=200, confidenceLevel=0.95)
 
     # get parameter covariance matrix at the desired confidence level
-    _,cov = getParamConfidence(t, rn, paramOpt, limits, Data; confidenceLevel=confidenceLevel)
+    _,cov = getParamConfidence(t, param, Data, odeHelpers; confidenceLevel=confidenceLevel)
 
     # create a multivariate normal distribution
     sampler = MvNormal(paramOpt, cov)
@@ -310,7 +357,7 @@ function paramToDataCI(t, rn, paramOpt, limits, Data; samples=200, confidenceLev
     particles = StaticParticles(samples, sampler)
 
     # propagate particles through the forward model
-    fitData,fitSpc,fitKin = paramToData(t, rn, particles, limits, Data)
+    fitData,fitSpc,fitKin = paramToData(t, param, Data, odeHelpers)
 
     return fitData,fitSpc,fitKin
 
@@ -318,5 +365,103 @@ end
 
 
 
+function paramToDataR(t, rn, param, limits, Data, odeprob)
+    species = getSpecies(rn)
+    # get populations at t = 0 
+    u0, count = gatherParams(species, param, limits, 1, 0)
+
+    rateConst = getParameters(rn)
+    # get rate constants
+    ks, count = gatherParams(rateConst, param, limits, NaN, count)
+
+    # get Gaussian IRF parameters
+    irfParam, count = gatherParams([:μ,:σ], param, limits, 0, count)
+    μ = irfParam[:μ]
+    σ = irfParam[:σ]
+
+    # make sure that all fit parameters have been distributed
+    @assert length(param) == count
+
+    # assemble time vector for ODE solver
+    tStepParam = getOdeTime(t, μ, σ)
+    tOde = tStepParam[1]
+    # time span for ODE solver
+    tspan = [minimum(tOde), maximum(tOde)] 
+
+    # set up and solve ODEs
+    #prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde)
+
+      prob = remake(odeprob;
+                  u0     = u0,
+                  p      = ks,
+                  tspan  = tspan,
+                  saveat = tOde)
+
+    # switch solver depending on data type
+    if eltype(param) isa Float64
+        sol  = solve(prob, AutoTsit5(Rosenbrock23()))
+    else
+        # for MonteCarloMeasurements
+        sol  = solve(prob,  Rosenbrock23(autodiff=AutoFiniteDiff()))
+    end
+
+    kin = transpose(Array(sol))
+
+    # convolve kinetic traces with IRF
+    kinConv = convolveIRF(t, kin, μ, σ, tStepParam)
+
+    # generate spectra based on calculated kinetics
+    testSpc = Data / kinConv'
+    # assemble data matrix 
+    testData = testSpc * kinConv'
+
+    return testData, testSpc, kinConv
+
+end
 
 
+
+"""
+Returns 2D matrix of residuals, calculated by subtracting the simulated 
+matrix from the experimental one.
+"""
+function paramToResidualsR(t, rn, param, limits, Data, odeprob)
+    testData, _, _ = paramToDataR(t, rn, param, limits, Data, odeprob)
+    return testData .- Data
+end
+
+
+"""
+Returns vector of residuals by flattening the output of `paramToResiduals`.
+Used for jacobian calculation.
+"""
+function paramToResidualsVecR(t, rn, param, limits, Data, odeprob)
+    res = paramToResidualsR(t, rn, param, limits, Data, odeprob)
+    return vec(res)
+end
+
+
+"""
+Returns sum of squared residuals between simulated and experimental
+data. Used for parameter optimization.
+"""
+function paramToSSRR(t, rn, param, limits, Data, odeprob)
+    res = paramToResidualsR(t, rn, param, limits, Data, odeprob)
+    return nansum((res).^2)
+end
+
+
+"""
+Parallel evaluation of `paramToSSR` for use with Metaheuristics.
+`param` is a 2D array, with dimension 1 corresponding to the number
+of parallel evaluations, and dimension 2 being the number of fit
+parameters.
+"""
+function paramToSSRParallelR(t, rn, param, limits, Data, odeprob)
+    ssr = zeros(size(param,1))
+    Threads.@threads for n in 1:size(param,1)
+    #for n in 1:size(param,1)
+        ssr[n] = paramToSSRR(t, rn, param[n,:], limits, Data, odeprob)
+    end
+    return ssr
+end
