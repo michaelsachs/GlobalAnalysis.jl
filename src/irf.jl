@@ -41,7 +41,7 @@ function getOdeTimeConstantStep(t, μ, σ)
     # extended time range; equal to t if tExtFinal < t[end]
     tOde = vcat(collect.([t, tExt])...)
 
-    return (tOde,)
+    return (tOde[tOde .> 0],)
 
 end
 
