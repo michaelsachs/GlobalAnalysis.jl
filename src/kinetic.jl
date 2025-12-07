@@ -281,8 +281,8 @@ end
 """
 Parallel evaluation of `paramToSSR` for use with Metaheuristics.
 `param` is a 2D array, with dimension 1 corresponding to the number
-of parallel evaluations, and dimension 2 being the number of fit
-parameters.
+of parallel evaluations (batch size), and dimension 2 being the number 
+of fit parameters. This function is called once per fit iteration.
 """
 function paramToSSRParallel(t, param, Data, odeHelpers)
     ssr = zeros(size(param,1))
