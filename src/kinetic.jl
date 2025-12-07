@@ -160,8 +160,8 @@ function setupVariables(rn, limits)
         end
     end
 
-    # transforms bounds into nx2 array
-    fitBounds = permutedims(hcat(fitBounds...))
+    # transforms bounds into 2xn array
+    fitBounds = hcat(fitBounds...)
     # indices for fit variables
     fitIdx = findall(fitMask)
 
@@ -173,7 +173,9 @@ function setupVariables(rn, limits)
     # indices of fitted variables for each component 
     fitIdx = [ [i for i in grp if fitMask[i]]  for grp in idxRanges ]
 
-    return syms, fitBounds, [paramTempl, fitIdx, idxRanges]
+    odeHelpers = [paramTempl, fitIdx, idxRanges, species, rateConst]
+
+    return syms, fitBounds, odeHelpers
 
 end
 
@@ -187,14 +189,31 @@ parameters in order (1) initial state populations, (2) rate constants,
 function paramToData(t, param, Data, odeHelpers)
 
     # split helper array into components
-    paramTempl, fitIdx, idxRanges = odeHelpers
+    paramTempl, fitIdx, idxRanges, species, rateConst = odeHelpers
+
+    pType = eltype(param)
 
     # make a copy of the template
     _paramTempl = copy(paramTempl)
+
+    if pType == Float64
+        _paramTempl = copy(paramTempl)
+    else
+        # 1 ± 0 as Particles
+        base = one(pType)          
+        _paramTempl = [paramTempl[i] * base for i in eachindex(paramTempl)]
+    end
+
     # fill fit parameters into template
     @inbounds _paramTempl[vcat(fitIdx...)] .= param
     # distribute parameters from template
     u0, ks, irf = view.(Ref(_paramTempl), idxRanges)
+
+    # convert vector to dict; essential for ODE solver to work with Particles
+    if pType ≠ Float64
+        u0 = Dict(species[i] => u0[i] for i in eachindex(u0))
+        ks = Dict(rateConst[i] => ks[i] for i in eachindex(ks))
+    end
 
     # assemble time vector for ODE solver
     tStepParam = getOdeTime(t, irf...)
@@ -208,9 +227,10 @@ function paramToData(t, param, Data, odeHelpers)
     # switch solver depending on data type
     if eltype(param) isa Float64
         sol  = solve(prob, AutoTsit5(Rosenbrock23()))
+    # for MonteCarloMeasurements 
     else
-        # for MonteCarloMeasurements
-        sol  = solve(prob,  Rosenbrock23(autodiff=AutoFiniteDiff()))
+        # Rosenbrock23 requires unsafe comparisons for Particles, avoid for now
+        sol = solve(prob, Tsit5())
     end
 
     kin = transpose(Array(sol))
@@ -284,7 +304,7 @@ end
 
 """
 Returns the half-widths `halfCI` of the two-sided confidence intervals for the
-best-fit parameter vector `paramOpt`.  The interval for each parameter is
+best-fit parameter vector `param`.  The interval for each parameter is
 
     paramOpt[i] ± halfCI[i]
 
@@ -299,7 +319,7 @@ function getParamConfidence(t, param, Data, odeHelpers; confidenceLevel=0.95)
     # number of observation (time x energy)
     numObs = length(resVec)
     # degrees of freedom
-    dof = numObs-length(paramOpt)
+    dof = numObs-length(param)
     # sum of squared residuals
     ssr = nansum(resVec.^2)
 
@@ -311,7 +331,7 @@ function getParamConfidence(t, param, Data, odeHelpers; confidenceLevel=0.95)
 
     # calculate the jacobian matrix
     J = FiniteDiff.finite_difference_jacobian(
-            p->paramToResidualsVec(t, p, Data, odeHelpers), paramOpt)
+            p->paramToResidualsVec(t, p, Data, odeHelpers), param)
     # perform QR decomposition
     F = LinearAlgebra.qr(J)
     # get upper triangular matrix R
@@ -352,12 +372,12 @@ function paramToDataCI(t, param, Data, odeHelpers; samples=200, confidenceLevel=
     _,cov = getParamConfidence(t, param, Data, odeHelpers; confidenceLevel=confidenceLevel)
 
     # create a multivariate normal distribution
-    sampler = MvNormal(paramOpt, cov)
+    sampler = MvNormal(param, cov)
     # vector of particle objects
     particles = StaticParticles(samples, sampler)
 
     # propagate particles through the forward model
-    fitData,fitSpc,fitKin = paramToData(t, param, Data, odeHelpers)
+    fitData,fitSpc,fitKin = paramToData(t, particles, Data, odeHelpers)
 
     return fitData,fitSpc,fitKin
 
