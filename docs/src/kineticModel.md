@@ -151,16 +151,16 @@ To run the global fit, we define the maximum number of iterations in the fit, fo
 
 ![Alt text](./assets/First_order_convergence.svg)
 
-The fit returns the following parameters, demonstrating that the input parameters have been recovered successfully. Returned parameters are in the order of rate constants and then IRF parameters, e.g. in this case `k1`, `k2`, `k3`, `μ`, `σ`.
+The fit returns the following parameters, demonstrating that the input parameters have been recovered successfully:
 
 ```
- 0.9973429786752928
- 0.10034827965186788
- 0.010001260582309495
- 0.1995665861641629
- 0.09967374660755733
+k1: 1.0002816167760311 ± 0.0042763919791576075
+k2: 0.10046000405051209 ± 0.0005161326238422253
+k3: 0.010022349614674112 ± 4.9376388596912e-5
+μ: 0.19984134420983 ± 0.0005094274396330147
+σ: 0.09979961002358176 ± 0.0007441254656281801
 ```
-The optimized kinetics are essentially identical to the input above:
+The fit values are shown with 95% confidence intervals by default; the confidence intervals can be adjusted by modifying `confidenceLevel = 0.95` within the notebook. The optimized kinetics are essentially identical to the input above:
 
 ![Alt text](./assets/First_order_fit_kinetics.svg)
 
@@ -262,12 +262,12 @@ limits = Dict(
 )
 ```
 
-The returned fit parameters are now `k1`, `k3`, `μ`, `σ`:
+The returned fit parameters are now `k1`, `k3`, `μ`, and `σ`. `k2` is no longer included because it is now fixed:
 ```
- 0.9987864025253465
- 0.010011635105851064
- 0.19962871764921578
- 0.09973821246066149
+k1: 0.9988580785710299 ± 0.003697971477127362
+k3: 0.010009089474607503 ± 4.692754124732182e-5
+μ: 0.19961704158350824 ± 0.0005007848493141988
+σ: 0.09969693587955372 ± 0.0007382136416665168
 ```
 
 ## Model refinement
