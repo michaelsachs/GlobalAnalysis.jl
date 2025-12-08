@@ -382,3 +382,19 @@ function paramToDataCI(t, param, Data, odeHelpers; samples=200, confidenceLevel=
     return fitData,fitSpc,fitKin
 
 end
+
+
+"""
+Prints the optimized value of each fitted variable as its mean value `fitParam` ± confidence 
+interval `ci`.
+"""
+function printFitResult(fitParam, ci, syms, fitIdx)
+
+    # vector of fit variables
+    fitVar = syms[vcat(fitIdx...)]
+    # print each fit variable with ci
+    for n in eachindex(fitVar)
+        println("$(fitVar[n]): $(fitParam[n]) ± $(ci[n])")
+    end
+
+end
