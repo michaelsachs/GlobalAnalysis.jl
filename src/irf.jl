@@ -370,6 +370,11 @@ For variable `t` spacing, `tStepParam` must be supplied from
 `getOdeTime`.
 """
 function convolveIRF(t, kin, μ, σ, tStepParam)
+    
+    # convert nx1 matrix to n-element vector
+    if ndims(kin) == 2 && size(kin,2) == 1
+        kin = vec(kin)
+    end
 
     isConstant, tStep, minStep = getTimeStepInfo(t)
 
