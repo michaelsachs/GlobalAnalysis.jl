@@ -107,7 +107,7 @@ Outputs
 * `syms` : all variables in a fixed order: `[species; rateConstants; μ; σ]`
 * `fitBounds` : `n×2` array of lower/upper bounds for the free parameters,
   in the exact order the optimiser will see them.
-* `odeHelpers` : 5-element helper vector reused by the forward model:
+* `odeHelpers` : 6-element helper vector reused by the forward model:
 
   1. `paramTempl` — complete parameter vector with fixed variables
      inserted and zeros for fitted variables.
@@ -121,6 +121,7 @@ Outputs
      need dictionary-based initial conditions.
   5. `rateConst`  — rate-constant symbols, used when particle-valued ODE
      inputs need dictionary-based parameters.
+  6. `rn`         — reaction network used to build the ODE problem.
 
 Notes
 -----
@@ -176,7 +177,7 @@ function setupVariables(rn, limits)
     # indices of fitted variables for each component 
     fitIdx = [ [i for i in grp if fitMask[i]]  for grp in idxRanges ]
 
-    odeHelpers = [paramTempl, fitIdx, idxRanges, species, rateConst]
+    odeHelpers = [paramTempl, fitIdx, idxRanges, species, rateConst, rn]
 
     return syms, fitBounds, odeHelpers
 
@@ -192,7 +193,7 @@ parameters in order (1) initial state populations, (2) rate constants,
 function paramToData(t, param, Data, odeHelpers)
 
     # split helper array into components
-    paramTempl, fitIdx, idxRanges, species, rateConst = odeHelpers
+    paramTempl, fitIdx, idxRanges, species, rateConst, rn = odeHelpers
 
     pType = eltype(param)
 
