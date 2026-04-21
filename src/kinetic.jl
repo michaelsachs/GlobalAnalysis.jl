@@ -105,10 +105,9 @@ Inputs
 Outputs
 -------
 * `syms` : all variables in a fixed order: `[species; rateConstants; μ; σ]`
-* `fitBounds` : lower/upper bounds for the free parameters, in the exact 
-order the optimiser will see them.
-* `odeHelpers` : 3-element vector containing only numeric data that
-  will be reused safely in every thread:
+* `fitBounds` : `n×2` array of lower/upper bounds for the free parameters,
+  in the exact order the optimiser will see them.
+* `odeHelpers` : 5-element helper vector reused by the forward model:
 
   1. `paramTempl` — complete parameter vector with fixed variables
      inserted and zeros for fitted variables.
@@ -118,6 +117,10 @@ order the optimiser will see them.
      `fitIdx[3]` fitted-IRF indices.
   3. `idxRanges`  — the three contiguous index ranges that correspond to
      *all* species, rate constants, and IRF parameters respectively.
+  4. `species`    — species symbols, used when particle-valued ODE inputs
+     need dictionary-based initial conditions.
+  5. `rateConst`  — rate-constant symbols, used when particle-valued ODE
+     inputs need dictionary-based parameters.
 
 Notes
 -----
@@ -160,8 +163,8 @@ function setupVariables(rn, limits)
         end
     end
 
-    # transforms bounds into 2xn array
-    fitBounds = hcat(fitBounds...)
+    # transforms bounds into nx2 array so each row matches one fit parameter
+    fitBounds = permutedims(hcat(fitBounds...))
     # indices for fit variables
     fitIdx = findall(fitMask)
 
