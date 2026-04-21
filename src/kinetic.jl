@@ -229,7 +229,7 @@ function paramToData(t, param, Data, odeHelpers)
     prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde)
 
     # switch solver depending on data type
-    if eltype(param) isa Float64
+    if pType == Float64
         sol  = solve(prob, AutoTsit5(Rosenbrock23()))
     # for MonteCarloMeasurements 
     else
