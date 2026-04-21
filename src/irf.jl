@@ -1,7 +1,7 @@
 using Distributions
 using Interpolations 
 using DSP
-using Plots
+using MonteCarloMeasurements
 
 
 #----------------------------------------------------------------------
@@ -18,6 +18,120 @@ end
 
 
 """
+Replace particle-valued IRF parameters by their mean values.
+
+The current IRF implementation uses a deterministic time grid and Gaussian
+kernel, so particle information in `μ` and `σ` is intentionally collapsed
+before grid construction and convolution. This approach will be reevaluated
+later.
+"""
+function getDeterministicIrfParameters(μ, σ)
+    if μ isa AbstractParticles
+        μ = pmean(μ)
+    end
+    if σ isa AbstractParticles
+        σ = pmean(σ)
+    end
+    return μ, σ
+end
+
+
+"""
+Returns whether `t` has a constant step, the first rounded step, and the
+minimum rounded step, while avoiding allocation of the full `diff(t)`.
+"""
+function getTimeStepInfo(t)
+    @assert length(t) ≥ 2
+
+    firstStep = round(t[2] - t[1]; digits=14)
+    minStep = firstStep
+    isConstant = true
+
+    @inbounds for n in 3:length(t)
+        step = round(t[n] - t[n-1]; digits=14)
+        if step != firstStep
+            isConstant = false
+        end
+        if step < minStep
+            minStep = step
+        end
+    end
+
+    return isConstant, firstStep, minStep
+end
+
+
+"""
+Merge sorted vectors `a` and `b` into a sorted unique vector and return the
+positions of the original entries in that merged vector.
+"""
+function mergeSortedUniqueWithIndices(a, b)
+    nA = length(a)
+    nB = length(b)
+    merged = Vector{Float64}(undef, nA + nB)
+    aIdx = Vector{Int}(undef, nA)
+    bIdx = Vector{Int}(undef, nB)
+
+    i = 1
+    j = 1
+    k = 1
+    while i ≤ nA && j ≤ nB
+        ai = a[i]
+        bj = b[j]
+        if isapprox(ai, bj; atol=1e-12, rtol=1e-12)
+            merged[k] = ai
+            aIdx[i] = k
+            bIdx[j] = k
+            i += 1
+            j += 1
+            k += 1
+        elseif ai < bj
+            merged[k] = ai
+            aIdx[i] = k
+            i += 1
+            k += 1
+        else
+            merged[k] = bj
+            bIdx[j] = k
+            j += 1
+            k += 1
+        end
+    end
+
+    while i ≤ nA
+        merged[k] = a[i]
+        aIdx[i] = k
+        i += 1
+        k += 1
+    end
+
+    while j ≤ nB
+        merged[k] = b[j]
+        bIdx[j] = k
+        j += 1
+        k += 1
+    end
+
+    resize!(merged, k - 1)
+    return merged, aIdx, bIdx
+end
+
+
+"""
+Build a mirrored grid `[-reverse(tPos); tPos]` without temporary arrays.
+"""
+function buildMirroredTimeGrid(tPos)
+    n = length(tPos)
+    out = Vector{Float64}(undef, 2n)
+    @inbounds for i in 1:n
+        out[i] = -tPos[n - i + 1]
+        out[n + i] = tPos[i]
+    end
+    return out
+end
+
+
+"""
 Returns time vector for ODE solver `tOde` given an input `t`
 in which all time points have equal spacing. 
 
@@ -26,22 +140,25 @@ calculating the kinetic trace to avoid edge effect over the
 original time range.
 """
 function getOdeTimeConstantStep(t, μ, σ)
-    # time steps; round to avoid machine precision inaccuracies
-    tSteps = getTimeSteps(t)
-    # check constant time step
-    @assert length(tSteps) == 1
-
-    tStep = tSteps[1]
-
+    _, tStep, _ = getTimeStepInfo(t)
 
     # final extended time point
     tExtFinal = t[end]+4σ-μ
-    # extend t by additional points
-    tExt = t[end]+tStep:tStep:tExtFinal
-    # extended time range; equal to t if tExtFinal < t[end]
-    tOde = vcat(collect.([t, tExt])...)
+    # index of first positive point in t
+    firstPos = searchsortedlast(t, 0.0) + 1
+    nBase = max(0, length(t) - firstPos + 1)
+    tExt = (t[end] + tStep):tStep:tExtFinal
+    nExt = length(tExt)
 
-    return (tOde[tOde .> 0],)
+    tOde = Vector{Float64}(undef, nBase + nExt)
+    if nBase > 0
+        copyto!(tOde, 1, t, firstPos, nBase)
+    end
+    @inbounds for n in 1:nExt
+        tOde[nBase + n] = tExt[n]
+    end
+
+    return (tOde,)
 
 end
 
@@ -55,13 +172,11 @@ with the instrument response, and arbitrarily spaced points at later
 times where effect of instrument response is negligible.
 """
 function getOdeTimeVariableStep(t, μ, σ)
-    # time steps; round to avoid machine precision inaccuracies
-    tSteps = unique(round.(diff(t); digits=14))
-    # check variable time step
-    @assert length(tSteps) > 1
+    isConstant, _, minStep = getTimeStepInfo(t)
+    @assert !isConstant
 
     # time step in irf window is smallest time step in dataset
-    irfStep = minimum(tSteps)
+    irfStep = minStep
     # IRF window width in pos/neg direction
     tMaxIrf = 30*σ
     # evenly spaced time steps for convolution
@@ -70,17 +185,17 @@ function getOdeTimeVariableStep(t, μ, σ)
 
     # time steps post convolution; shift post-irf time by -μ to 
     # evaluate correct points for original time vector in ODE
-    tPostConv = t[t .≥ tMaxIrf] .- μ
+    firstPost = searchsortedfirst(t, tMaxIrf)
+    nPost = max(0, length(t) - firstPost + 1)
+    tPostConv = Vector{Float64}(undef, nPost)
+    @inbounds for n in 1:nPost
+        tPostConv[n] = t[firstPost + n - 1] - μ
+    end
     
     # combine irf and post-irf times in array for single call to ODE solver
-    tOde = sort(unique([tConv; tPostConv]))
-
-    # keep track of which time in tOde vector is IRF/post-IRF; some 
-    # may be in both
-    tConvBl = in.(tOde, Ref(Set(tConv)))
-    tPostConvBl = in.(tOde, Ref(Set(t .- μ)))
+    tOde, tConvIdx, tPostIdx = mergeSortedUniqueWithIndices(tConv, tPostConv)
     
-    return (tOde, tConv, tMaxIrf, tConvBl, tPostConvBl)
+    return (tOde, tConv, tMaxIrf, tConvIdx, tPostIdx)
 
 end
 
@@ -92,18 +207,12 @@ standard deviation `σ`, and automatically taking care of
 `t` spacing. 
 """
 function getOdeTime(t, μ, σ)
+    μ, σ = getDeterministicIrfParameters(μ, σ)
 
-    # use mean for MonteCarloMeasurements (Particles cause errors
-    # with ranges)
-    if μ isa AbstractParticles       
-        μ = pmean(μ)
-        σ = pmean(σ)
-    end
-
-    tSteps = getTimeSteps(t)
+    isConstant, _, _ = getTimeStepInfo(t)
 
     # constant time spacing
-    if length(tSteps) == 1
+    if isConstant
         return getOdeTimeConstantStep(t, μ, σ)
     # variable time spacing
     else
@@ -136,8 +245,13 @@ Generates Gaussian over vector `t`, centred around `μ` with
 standard deviation `σ`.
 """
 function getGaussianIRF(t, μ, σ)
-    # get Gaussian
-    irf = pdf.(Normal(μ, σ), t)
+    μ, σ = getDeterministicIrfParameters(μ, σ)
+    irf = Vector{Float64}(undef, length(t))
+    norm = inv(σ * √(2π))
+    @inbounds for n in eachindex(t)
+        d = (t[n] - μ) / σ
+        irf[n] = norm * exp(-0.5 * d * d)
+    end
     return irf
 end
 
@@ -151,17 +265,15 @@ is calculated over full `t`.
 `kin` can be a single kinetic trace or a matrix consisting of
 multiple kinetic traces as columns.
 """
-function convolveIrfConstantStep(t, kin, irf, tSteps) 
-
-    @assert length(tSteps) == 1
+function convolveIrfConstantStep(t, kin, irf, tStep::Real)
     @assert length(t) == length(irf)
-    tStep = tSteps[1]
 
     # normalise IRF by its area
     irf ./= trapezIntegration(t,irf)
 
     # discrete convolution, hence multiply by time step
-    kinConv = DSP.conv(kin, irf) .* tStep
+    kinConv = DSP.conv(kin, irf)
+    kinConv .*= tStep
 
     # make convolved data same length as IRF data to restore 
     # time correspondence
@@ -169,6 +281,14 @@ function convolveIrfConstantStep(t, kin, irf, tSteps)
 
     return kinConvSame
 
+end
+
+"""
+Compatibilty function in case `tSteps` is an array.
+"""
+function convolveIrfConstantStep(t, kin, irf, tSteps) 
+    @assert length(tSteps) == 1
+    return convolveIrfConstantStep(t, kin, irf, tSteps[1])
 end
 
 
@@ -190,46 +310,52 @@ Later times, at which the effect of the instrument response is
 negiligible, are appended to the convolved data without convolution.
 """
 function convolveIrfVariableStep(t, kin, μ, σ, tSteps, tStepParam)
-
-    @assert length(tSteps) > 1
-
-    tOde, tConv, tMaxIrf, tConvBl, tPostConvBl = tStepParam
+    tOde, tConv, tMaxIrf, tConvIdx, tPostIdx = tStepParam
 
     # mirror evenly spaced times around zero
-    tIrf = [reverse(-tConv); tConv]
+    tIrf = buildMirroredTimeGrid(tConv)
     # generate IRF
     irf = getGaussianIRF(tIrf, μ, σ)
 
     # convolve evenly spaced part of kinetic trace
-    kinConv = convolveIrfConstantStep(tIrf, selectdim(kin,1,tConvBl), 
-        irf, [minimum(tSteps)])
+    irfStep = length(tSteps) == 1 ? tSteps[1] : tConv[2] - tConv[1]
+    if ndims(kin) == 1
+        kinConv = convolveIrfConstantStep(tIrf, view(kin, tConvIdx), irf, irfStep)
+    else
+        kinConv = convolveIrfConstantStep(tIrf, view(kin, tConvIdx, :), irf, irfStep)
+    end
 
-    # number of kinetic traces
-    numKin = size(kin,2)
+    activeStart = searchsortedfirst(t, -tMaxIrf)
+    postStart = searchsortedfirst(t, tMaxIrf)
 
     # interpolator for convolved trace
     # single kinetic trace
-    if numKin == 1
+    if ndims(kin) == 1
         itpKinConv = interpolate((tIrf,), kinConv, Gridded(Linear()))
+        kinConvFinal = similar(kin, length(t))
+        fill!(kinConvFinal, zero(eltype(kinConvFinal)))
+        @inbounds for i in activeStart:postStart-1
+            kinConvFinal[i] = itpKinConv(t[i])
+        end
+        @inbounds for i in postStart:length(t)
+            kinConvFinal[i] = kin[tPostIdx[i - postStart + 1]]
+        end
     # multiple kinetic traces
     else
         # no interpolation along second dimension 
+        numKin = size(kin,2)
         itpKinConv = interpolate((tIrf,1:numKin,), kinConv, 
             (Gridded(Linear()),NoInterp()))
-    end
-
-
-    # interpolation back onto original time vector
-    # single kinetic trace
-    if numKin == 1
-        kinConvFinal = [zeros(length(t[t .< -tMaxIrf])); 
-            itpKinConv(t[-tMaxIrf .≤ t .< tMaxIrf]); 
-            kin[tPostConvBl]]
-    # multiple kinetic traces
-    else
-        kinConvFinal = [zeros(length(t[t .< -tMaxIrf]),numKin); 
-            itpKinConv(t[-tMaxIrf .≤ t .< tMaxIrf],1:numKin); 
-            kin[tPostConvBl,:]]
+        kinConvFinal = similar(kin, length(t), numKin)
+        fill!(kinConvFinal, zero(eltype(kinConvFinal)))
+        @inbounds for m in 1:numKin
+            for i in activeStart:postStart-1
+                kinConvFinal[i,m] = itpKinConv(t[i], m)
+            end
+            for i in postStart:length(t)
+                kinConvFinal[i,m] = kin[tPostIdx[i - postStart + 1],m]
+            end
+        end
     end
 
     return kinConvFinal
@@ -245,16 +371,16 @@ For variable `t` spacing, `tStepParam` must be supplied from
 """
 function convolveIRF(t, kin, μ, σ, tStepParam)
 
-    tSteps = getTimeSteps(t)
+    isConstant, tStep, minStep = getTimeStepInfo(t)
 
     # constant time spacing
-    if length(tSteps) == 1    
+    if isConstant    
         # generate IRF
         irf = getGaussianIRF(t, μ, σ)
-        return convolveIrfConstantStep(t, kin, irf, tSteps) 
+        return convolveIrfConstantStep(t, kin, irf, tStep) 
     # variable time spacing
     else
-        return convolveIrfVariableStep(t, kin, μ, σ, tSteps, tStepParam)
+        return convolveIrfVariableStep(t, kin, μ, σ, (minStep,), tStepParam)
     end
 
 end
