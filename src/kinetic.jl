@@ -357,8 +357,8 @@ end
 Returns sum of squared residuals between simulated and experimental
 data. Used for parameter optimization.
 
-`ssrData` must be precomputed once for the fixed dataset via
-`Meta(Data)` and reused across objective evaluations.
+`ssrData` must be precomputed once for the fixed dataset via and 
+reused across objective evaluations.
 """
 function paramToSSR(t, param, Data, odeHelpers, ssrData::SSRMetaData)
     kinConv = paramToKin(t, param, odeHelpers)
