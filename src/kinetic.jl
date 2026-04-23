@@ -185,20 +185,17 @@ end
 
 
 """
-Generates test data by calculating kinetic traces based on time vector
-`t`, reaction network `rn`, and parameter vector `param`. `param` contains 
-parameters in order (1) initial state populations, (2) rate constants, 
-(3) IRF parameters.
+Generates convolved kinetic traces based on time vector `t`, reaction
+network `rn`, and parameter vector `param`. `param` contains parameters
+in order (1) initial state populations, (2) rate constants, (3) IRF
+parameters.
 """
-function paramToData(t, param, Data, odeHelpers)
+function paramToKin(t, param, odeHelpers)
 
     # split helper array into components
     paramTempl, fitIdx, idxRanges, species, rateConst, rn = odeHelpers
 
     pType = eltype(param)
-
-    # make a copy of the template
-    _paramTempl = copy(paramTempl)
 
     if pType == Float64
         _paramTempl = copy(paramTempl)
@@ -240,7 +237,20 @@ function paramToData(t, param, Data, odeHelpers)
     kin = transpose(Array(sol))
 
     # convolve kinetic traces with IRF
-    kinConv = convolveIRF(t, kin, irf..., tStepParam)
+    return convolveIRF(t, kin, irf..., tStepParam)
+
+end
+
+
+"""
+Generates test data by calculating kinetic traces based on time vector
+`t`, reaction network `rn`, and parameter vector `param`. `param` contains 
+parameters in order (1) initial state populations, (2) rate constants, 
+(3) IRF parameters.
+"""
+function paramToData(t, param, Data, odeHelpers)
+
+    kinConv = paramToKin(t, param, odeHelpers)
 
     # generate spectra based on calculated kinetics
     testSpc = Data / kinConv'
@@ -273,12 +283,97 @@ end
 
 
 """
+Precompute SSR metadata for a fixed dataset so repeated objective evaluations
+avoid rescanning `Data`.
+"""
+function setupSSRMetaData(Data)
+    dataNorm = zero(eltype(Data))
+    hasNaN = false
+
+    @inbounds for datum in Data
+        if isnan(datum)
+            hasNaN = true
+        else
+            dataNorm += datum * datum
+        end
+    end
+
+    return SSRMetaData(dataNorm, hasNaN)
+end
+
+
+"""
+Fastest SSR path which avoids constructing residuals column-by-column. Requires
+input data without NaNs.
+
+`testData = testSpc * kinConv'` is the closest reconstruction of `Data`
+reachable with the current basis (`kinConv`). The remaining residual
+`Data - testData` is therefore pure unexplained error, so:
+``||Data - testData||² = ||Data||² - ||testData||²``.
+"""
+function projectSSR(dataNorm, testSpc, kinConv)
+    gram = kinConv' * kinConv
+    projectedSpc = testSpc * gram
+    ssr = dataNorm - dot(testSpc, projectedSpc)
+
+    # Guard against tiny negative values from floating-point roundoff.
+    if ssr < 0 && isapprox(ssr, zero(ssr); atol=eps(real(ssr)) * max(one(real(ssr)), dataNorm))
+        return zero(ssr)
+    end
+
+    return ssr
+end
+
+
+"""
+NaN-tolerant in-place residual accumulation that reuses the column buffer
+`_spc`.
+"""
+function accumulateSSR!(_spc, Data, testSpc, kinConv)
+
+    @assert size(Data, 1) == size(testSpc, 1)
+    @assert size(Data, 2) == size(kinConv, 1)
+    @assert size(testSpc, 2) == size(kinConv, 2)
+
+    # create a correctly-typed zero for accumulating ssr
+    ssr = zero(promote_type(eltype(Data), eltype(testSpc), eltype(kinConv)))
+
+    @inbounds for n in axes(Data, 2)
+        mul!(_spc, testSpc, view(kinConv, n, :))
+        for m in axes(Data, 1)
+            diff = _spc[m] - Data[m, n]
+            if !isnan(diff)
+                ssr += diff * diff
+            end
+        end
+    end
+
+    return ssr
+
+end
+
+
+"""
 Returns sum of squared residuals between simulated and experimental
 data. Used for parameter optimization.
+
+`ssrData` must be precomputed once for the fixed dataset via
+`Meta(Data)` and reused across objective evaluations.
 """
-function paramToSSR(t, param, Data, odeHelpers)
-    res = paramToResiduals(t, param, Data, odeHelpers)
-    return nansum((res).^2)
+function paramToSSR(t, param, Data, odeHelpers, ssrData::SSRMetaData)
+    kinConv = paramToKin(t, param, odeHelpers)
+    testSpc = Data / kinConv'
+
+    if ssrData.hasNaN
+        # slower path if Data contains NaN
+        _spc = similar(testSpc, size(Data, 1))
+        ssr = accumulateSSR!(_spc, Data, testSpc, kinConv)
+    else
+        # fast path for Data without NaN
+        ssr = projectSSR(ssrData.dataNorm, testSpc, kinConv)
+    end
+
+    return ssr
 end
 
 
@@ -288,10 +383,10 @@ Parallel evaluation of `paramToSSR` for use with Metaheuristics.
 of parallel evaluations (batch size), and dimension 2 being the number 
 of fit parameters. This function is called once per fit iteration.
 """
-function paramToSSRParallel(t, param, Data, odeHelpers)
+function paramToSSRParallel(t, param, Data, odeHelpers, ssrData::SSRMetaData)
     ssr = zeros(size(param,1))
     Threads.@threads for n in 1:size(param,1)
-        ssr[n] = paramToSSR(t, param[n,:], Data, odeHelpers)
+        ssr[n] = paramToSSR(t, param[n,:], Data, odeHelpers, ssrData)
     end
     return ssr
 end

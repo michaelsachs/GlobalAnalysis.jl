@@ -61,12 +61,26 @@ function buildSequentialFitProblem()
     )
 
     _, bounds, odeHelpers = setupVariables(rn, limits)
-    return (; t, d, bounds, odeHelpers)
+    ssrData = setupSSRMetaData(d)
+    return (; t, d, bounds, odeHelpers, ssrData)
+end
+
+@testset "Direct SSR Objective Matches Residual Path" begin
+    problem = buildSequentialFitProblem()
+    center = vec(mean(problem.bounds, dims=2))
+    offcenter = center .* [1.05, 0.95, 1.02, 0.80, 1.10]
+
+    for param in (center, offcenter)
+        direct = paramToSSR(problem.t, param, problem.d, problem.odeHelpers, problem.ssrData)
+        residuals = paramToResiduals(problem.t, param, problem.d, problem.odeHelpers)
+        ssr = nansum(abs2.(residuals))
+        @test isapprox(direct, ssr; rtol=1e-12, atol=1e-12)
+    end
 end
 
 function runSequentialFitRegression(; seed=1234, iterations=30, population=8)
     problem = buildSequentialFitProblem()
-    objective = param -> paramToSSR(problem.t, param, problem.d, problem.odeHelpers)
+    objective = param -> paramToSSR(problem.t, param, problem.d, problem.odeHelpers, problem.ssrData)
 
     blasThreads = BLAS.get_num_threads()
     result = nothing

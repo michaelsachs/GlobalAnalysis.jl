@@ -10,3 +10,11 @@ struct DataStruct{T}
     unit::Array{String}
     file::Array{String}
 end
+
+"""
+Precomputed dataset metadata reused by `paramToSSR` during kinetic optimisation.
+"""
+struct SSRMetaData{T}
+    dataNorm::T
+    hasNaN::Bool
+end
