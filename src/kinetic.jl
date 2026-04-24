@@ -226,7 +226,7 @@ function paramToKin(t, param, odeHelpers)
     tspan = [first(tOde), last(tOde)]
 
     # set up and solve ODEs
-    prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde)
+    prob = ODEProblem(rn, u0, tspan, ks; save_everystep=false, dense=false)
 
     # switch solver depending on data type
     if pType == Float64
