@@ -107,11 +107,12 @@ Outputs
 * `syms` : all variables in a fixed order: `[species; rateConstants; μ; σ]`
 * `fitBounds` : `n×2` array of lower/upper bounds for the free parameters,
   in the exact order the optimiser will see them.
-* `odeHelpers` : 6-element helper vector reused by the forward model:
+* `odeHelpers` : helper vector reused by the forward model:
 
   1. `paramTempl` — complete parameter vector with fixed variables
      inserted and zeros for fitted variables.
-  2. `fitIdx`     — a 3-element vector of vectors:  
+  2. `fitLinearIdx` — the flattened version of `fitIdx`, a 3-element vector 
+    of vectors containing:  
      `fitIdx[1]` fitted-species indices,  
      `fitIdx[2]` fitted-rate-constant indices,  
      `fitIdx[3]` fitted-IRF indices.
@@ -126,8 +127,8 @@ Outputs
 Notes
 -----
 * All dictionary look-ups and symbol handling are done here, once,
-  so the threaded objective works purely with numeric vectors and
-  thread-safe `remake`.
+  so the threaded objective works mostly with numeric vectors and
+  precomputed helper metadata.
 """
 function setupVariables(rn, limits)
 
@@ -176,8 +177,10 @@ function setupVariables(rn, limits)
     idxRanges = [s:(s+l-1) for (s,l) in zip(firsts, lengths)]
     # indices of fitted variables for each component 
     fitIdx = [ [i for i in grp if fitMask[i]]  for grp in idxRanges ]
+    # flatten indices
+    fitLinearIdx = vcat(fitIdx...)
 
-    odeHelpers = [paramTempl, fitIdx, idxRanges, species, rateConst, rn]
+    odeHelpers = [paramTempl, fitLinearIdx, idxRanges, species, rateConst, rn]
 
     return syms, fitBounds, odeHelpers
 
@@ -193,7 +196,7 @@ parameters.
 function paramToKin(t, param, odeHelpers)
 
     # split helper array into components
-    paramTempl, fitIdx, idxRanges, species, rateConst, rn = odeHelpers
+    paramTempl, fitLinearIdx, idxRanges, species, rateConst, rn = odeHelpers
 
     pType = eltype(param)
 
@@ -206,7 +209,7 @@ function paramToKin(t, param, odeHelpers)
     end
 
     # fill fit parameters into template
-    @inbounds _paramTempl[vcat(fitIdx...)] .= param
+    @inbounds _paramTempl[fitLinearIdx] .= param
     # distribute parameters from template
     u0, ks, irf = view.(Ref(_paramTempl), idxRanges)
 
@@ -220,7 +223,7 @@ function paramToKin(t, param, odeHelpers)
     tStepParam = getOdeTime(t, irf...)
     tOde = tStepParam[1]
     # time span for ODE solver
-    tspan = [minimum(tOde), maximum(tOde)] 
+    tspan = [first(tOde), last(tOde)]
 
     # set up and solve ODEs
     prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde)
@@ -487,10 +490,10 @@ end
 Prints the optimized value of each fitted variable as its mean value `fitParam` ± confidence 
 interval `ci`.
 """
-function printFitResult(fitParam, ci, syms, fitIdx)
+function printFitResult(fitParam, ci, syms, fitLinearIdx)
 
     # vector of fit variables
-    fitVar = syms[vcat(fitIdx...)]
+    fitVar = syms[fitLinearIdx]
     # print each fit variable with ci
     for n in eachindex(fitVar)
         println("$(fitVar[n]): $(fitParam[n]) ± $(ci[n])")
