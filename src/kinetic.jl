@@ -111,18 +111,18 @@ Outputs
 
   1. `paramTempl` — complete parameter vector with fixed variables
      inserted and zeros for fitted variables.
-  2. `fitLinearIdx` — the flattened version of `fitIdx`, a 3-element vector 
-    of vectors containing:  
+  2.  3-element vector of vectors containing indices of fit variables:  
      `fitIdx[1]` fitted-species indices,  
      `fitIdx[2]` fitted-rate-constant indices,  
      `fitIdx[3]` fitted-IRF indices.
-  3. `idxRanges`  — the three contiguous index ranges that correspond to
+  3. `fitLinearIdx` — flattened version of `fitIdx`.
+  4. `idxRanges`  — the three contiguous index ranges that correspond to
      *all* species, rate constants, and IRF parameters respectively.
-  4. `species`    — species symbols, used when particle-valued ODE inputs
+  5. `species`    — species symbols, used when particle-valued ODE inputs
      need dictionary-based initial conditions.
-  5. `rateConst`  — rate-constant symbols, used when particle-valued ODE
+  6. `rateConst`  — rate-constant symbols, used when particle-valued ODE
      inputs need dictionary-based parameters.
-  6. `rn`         — reaction network used to build the ODE problem.
+  7. `rn`         — reaction network used to build the ODE problem.
 
 Notes
 -----
@@ -180,7 +180,7 @@ function setupVariables(rn, limits)
     # flatten indices
     fitLinearIdx = vcat(fitIdx...)
 
-    odeHelpers = [paramTempl, fitLinearIdx, idxRanges, species, rateConst, rn]
+    odeHelpers = [paramTempl, fitIdx, fitLinearIdx, idxRanges, species, rateConst, rn]
 
     return syms, fitBounds, odeHelpers
 
@@ -196,7 +196,7 @@ parameters.
 function paramToKin(t, param, odeHelpers)
 
     # split helper array into components
-    paramTempl, fitLinearIdx, idxRanges, species, rateConst, rn = odeHelpers
+    paramTempl, _, fitLinearIdx, idxRanges, species, rateConst, rn = odeHelpers
 
     pType = eltype(param)
 
@@ -223,10 +223,10 @@ function paramToKin(t, param, odeHelpers)
     tStepParam = getOdeTime(t, irf...)
     tOde = tStepParam[1]
     # time span for ODE solver
-    tspan = [first(tOde), last(tOde)]
+    tspan = [minimum(tOde), maximum(tOde)]
 
     # set up and solve ODEs
-    prob = ODEProblem(rn, u0, tspan, ks; save_everystep=false, dense=false)
+    prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde, save_everystep=false, dense=false)
 
     # switch solver depending on data type
     if pType == Float64
