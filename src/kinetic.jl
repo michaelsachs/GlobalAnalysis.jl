@@ -8,6 +8,10 @@ using MonteCarloMeasurements
 
 include("irf.jl")
 
+# per-thread integrator cache; stores reusable ODE solver instance to avoid 
+# rebuilding solver internals on every objective call
+const IntegratorCache = [IdDict{Any, Any}() for _ in 1:Threads.maxthreadid()]
+
 
 """
 Generates upper and lower limits for fit parameters based on reaction
@@ -225,14 +229,50 @@ function paramToKin(t, param, odeHelpers)
     # time span for ODE solver
     tspan = [minimum(tOde), maximum(tOde)]
 
-    # set up and solve ODEs
-    prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde, save_everystep=false, dense=false)
-
     # switch solver depending on data type
     if pType == Float64
-        sol  = solve(prob, AutoTsit5(Rosenbrock23()))
+        # get thread-local cache 
+        cache = IntegratorCache[Threads.threadid()]
+        # get reusable integrator or cache miss
+        integrator = get(cache, rn, nothing)
+
+        # turn views into arrays for use with reinit
+        u0v = collect(u0)
+        ksv = collect(ks)
+
+        # cache-miss (first time a thread sees rn, or after
+        # cache is cleared)
+        if integrator === nothing
+            prob = ODEProblem(rn, u0v, tspan, ksv; saveat=tOde,
+                save_everystep=false, dense=false)
+            sol = solve(prob, AutoTsit5(Rosenbrock23()))
+            # initialize solver state
+            integrator = init(prob, AutoTsit5(Rosenbrock23()))
+            # store integrator in thread-local cache
+            cache[rn] = integrator
+        # cache lookup found existing integrator
+        else
+            # makes sure reinitialization runs with the intended parameters
+            integrator.p = ModelingToolkit.SciMLStructures.replace(
+                ModelingToolkit.SciMLStructures.Tunable(), 
+                integrator.p, ksv)
+
+            # retarget cached integrator for the next parameter evaluation
+            reinit!(integrator, u0v; t0=tspan[1], tf=tspan[2],
+                saveat=tOde, erase_sol=true, reset_dt=true,
+                reinit_cache=true, reinit_callbacks=true,
+                initialize_save=true)
+
+            # safety step, because reinit may overwrite stored parameters
+            integrator.p = ModelingToolkit.SciMLStructures.replace(
+                ModelingToolkit.SciMLStructures.Tunable(),
+                integrator.p, ksv)
+
+            sol = solve!(integrator)
+        end
     # for MonteCarloMeasurements 
     else
+        prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde, save_everystep=false, dense=false)
         # Rosenbrock23 requires unsafe comparisons for Particles, avoid for now
         sol = solve(prob, Tsit5())
     end
