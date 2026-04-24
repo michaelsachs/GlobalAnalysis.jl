@@ -306,18 +306,43 @@ end
 
 
 """
-Fastest SSR path which avoids constructing residuals column-by-column. Requires
-input data without NaNs.
+Fast SSR path for non-NaN data.
 
-`testData = testSpc * kinConv'` is the closest reconstruction of `Data`
-reachable with the current basis (`kinConv`). The remaining residual
-`Data - testData` is therefore pure unexplained error, so:
-``||Data - testData||² = ||Data||² - ||testData||²``.
+This computes the same least-squares objective as the classic
+`testSpc = Data / kinConv'` route, but with lower allocation pressure.
+
+Preferred path:
+solve the normal equations
+`testSpc * (kinConv' * kinConv) = Data * kinConv`,
+then evaluate
+`||Data - testData||² = ||Data||² - ||testData||²`
+with `||testData||² = dot(testSpc, Data * kinConv)`.
+
+Fallback path:
+if the Gram matrix is singular/indefinite, fall back to the robust
+`Data / kinConv'` solve and evaluate the same projection identity.
 """
-function projectSSR(dataNorm, testSpc, kinConv)
+function projectSSR(dataNorm, Data, kinConv)
     gram = kinConv' * kinConv
-    projectedSpc = testSpc * gram
-    ssr = dataNorm - dot(testSpc, projectedSpc)
+    testSpc = Data * kinConv
+    testSpcSolve = copy(testSpc)
+    ssr = zero(promote_type(typeof(dataNorm), eltype(Data), eltype(kinConv)))
+
+    # use Cholesky on the tiny k×k Gram system
+    try
+        chol = cholesky(Hermitian(gram))
+        rdiv!(testSpcSolve, chol)
+        ssr = dataNorm - dot(testSpcSolve, testSpc)
+    # fall back to robust QR/LAPACK route if Gram is singular/indefinite
+    catch err
+        if err isa PosDefException || err isa SingularException
+            testSpc = Data / kinConv'
+            projectedSpc = testSpc * gram
+            ssr = dataNorm - dot(testSpc, projectedSpc)
+        else
+            rethrow(err)
+        end
+    end
 
     # Guard against tiny negative values from floating-point roundoff.
     if ssr < 0 && isapprox(ssr, zero(ssr); atol=eps(real(ssr)) * max(one(real(ssr)), dataNorm))
@@ -365,15 +390,15 @@ reused across objective evaluations.
 """
 function paramToSSR(t, param, Data, odeHelpers, ssrData::SSRMetaData)
     kinConv = paramToKin(t, param, odeHelpers)
-    testSpc = Data / kinConv'
 
     if ssrData.hasNaN
         # slower path if Data contains NaN
+        testSpc = Data / kinConv'
         _spc = similar(testSpc, size(Data, 1))
         ssr = accumulateSSR!(_spc, Data, testSpc, kinConv)
     else
         # fast path for Data without NaN
-        ssr = projectSSR(ssrData.dataNorm, testSpc, kinConv)
+        ssr = projectSSR(ssrData.dataNorm, Data, kinConv)
     end
 
     return ssr
