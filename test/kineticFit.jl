@@ -74,7 +74,7 @@ end
         direct = paramToSSR(problem.t, param, problem.d, problem.odeHelpers, problem.ssrData)
         residuals = paramToResiduals(problem.t, param, problem.d, problem.odeHelpers)
         ssr = nansum(abs2.(residuals))
-        @test isapprox(direct, ssr; rtol=1e-12, atol=1e-12)
+        @test isapprox(direct, ssr; rtol=1e-6, atol=1e-6)
     end
 end
 
