@@ -6,10 +6,10 @@
 #include("TypeDefinitions.jl")
 
 using CSV, Glob
-using DataFrames
 using StructArrays
 using Statistics
 using Interpolations
+using Tables
 
 include("types.jl")
 
@@ -107,11 +107,9 @@ function importData(path)
     for nf in eachindex(files)
 
         # import; all entries which cannot be converted to Float64 are imported as missing
-        DF = CSV.File(files[nf]; skipto=1, types=Float64) |> DataFrame
+        DF = CSV.File(files[nf]; skipto=1, types=Float64) |> Tables.matrix
         # convert missing (e.g. from text in .csv) to NaN
         DF = coalesce.(DF,NaN)
-        # convert DataFrame to array
-        DF = Matrix(DF)
 
         # count NaN in each col
         NumNaNCols = [sum(isnan.(col)) for col = eachcol(DF)]
@@ -464,8 +462,7 @@ function importDataVectors(directory, x)
     # then remove rows which contain NaN in the final matrix 
     Y = Array{Union{Float64,Missing}}(undef,length(x),0)
     for nf in eachindex(files)
-        DF = CSV.File(files[nf]; datarow=2, type=Float64) |> DataFrame
-        data = Matrix(DF)
+        data = CSV.File(files[nf]; datarow=2, types=Float64) |> Tables.matrix
         # one y vector in file 
         if size(data,2) == 2
             itpData = interpolate((data[:,1],), data[:,2], Gridded(Linear()))
