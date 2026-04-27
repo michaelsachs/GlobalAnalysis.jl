@@ -1,10 +1,14 @@
 using Catalyst
-using DifferentialEquations
+using CommonSolve: init, solve, solve!
 using NaNStatistics
 using Distributions
 using FiniteDiff
 using LinearAlgebra
 using MonteCarloMeasurements
+using OrdinaryDiffEqRosenbrock: Rosenbrock23
+using OrdinaryDiffEqTsit5: AutoTsit5, Tsit5
+using SciMLBase: ODEProblem, reinit!
+using SciMLStructures
 
 include("irf.jl")
 
@@ -253,8 +257,8 @@ function paramToKin(t, param, odeHelpers)
         # cache lookup found existing integrator
         else
             # makes sure reinitialization runs with the intended parameters
-            integrator.p = ModelingToolkit.SciMLStructures.replace(
-                ModelingToolkit.SciMLStructures.Tunable(), 
+            integrator.p = SciMLStructures.replace(
+                SciMLStructures.Tunable(), 
                 integrator.p, ksv)
 
             # retarget cached integrator for the next parameter evaluation
@@ -264,8 +268,8 @@ function paramToKin(t, param, odeHelpers)
                 initialize_save=true)
 
             # safety step, because reinit may overwrite stored parameters
-            integrator.p = ModelingToolkit.SciMLStructures.replace(
-                ModelingToolkit.SciMLStructures.Tunable(),
+            integrator.p = SciMLStructures.replace(
+                SciMLStructures.Tunable(),
                 integrator.p, ksv)
 
             sol = solve!(integrator)
