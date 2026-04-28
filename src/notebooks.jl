@@ -1,4 +1,5 @@
 using IJulia
+using Pkg
 
 const kernelName = "JuliaGA"
 
@@ -24,6 +25,46 @@ defaultNotebookPath() = normpath(joinpath(homedir(), "GlobalAnalysis.jl"))
 Returns the package project folder used when registering the notebook kernel.
 """
 packageProjectPath() = normpath(joinpath(@__DIR__, ".."))
+
+
+"""
+    kernelSpecName()
+
+Returns the Jupyter kernelspec name used by the GlobalAnalysis notebook
+kernel.
+"""
+kernelSpecName() = "$(lowercase(kernelName))-$(VERSION.major).$(VERSION.minor)"
+
+
+"""
+    kernelDisplayName()
+
+Returns the user-facing Jupyter kernel name shown in the browser.
+"""
+kernelDisplayName() = "$(kernelName) $(VERSION.major).$(VERSION.minor)"
+
+
+"""
+    preparePackageProject()
+
+Instantiates and precompiles the package project used by the notebook kernel.
+"""
+function preparePackageProject()
+    activeProject = Base.active_project()
+    packageProject = packageProjectPath()
+
+    try
+        # setup may be called from a temporary outer project; prepare the
+        # project that the installed Jupyter kernel will actually launch
+        Pkg.activate(packageProject)
+        Pkg.instantiate()
+        Pkg.precompile()
+    finally
+        if activeProject !== nothing
+            Pkg.activate(activeProject)
+        end
+    end
+end
 
 
 """
@@ -105,6 +146,68 @@ function copyNotebooks(notebookPath; sourcePath=packageNotebookPath())
     end
 
     println("✓ Copied notebooks to $(notebookDir)")
+
+    return copiedNotebooks
+end
+
+
+"""
+    setNotebookKernel!(notebookPath)
+
+Sets the Jupyter kernel metadata of `notebookPath` to the dedicated
+GlobalAnalysis kernel.
+"""
+function setNotebookKernel!(notebookPath)
+    notebookFile = resolveNotebookPath(notebookPath)
+    notebook = read(notebookFile, String)
+
+    kernelSpec = """
+"kernelspec": {
+   "display_name": "$(kernelDisplayName())",
+   "language": "julia",
+   "name": "$(kernelSpecName())"
+  }"""
+
+    # only update the notebook metadata; code cells and outputs stay untouched
+    updatedNotebook = replace(
+        notebook,
+        r"\"kernelspec\"\s*:\s*\{.*?\n\s*\}"s => kernelSpec;
+        count=1,
+    )
+
+    if updatedNotebook != notebook
+        write(notebookFile, updatedNotebook)
+        return true
+    end
+
+    return false
+end
+
+
+"""
+    setNotebookKernels!(notebookPath)
+
+Sets all copied notebook files in `notebookPath` to use the dedicated
+GlobalAnalysis kernel.
+"""
+function setNotebookKernels!(notebookPath)
+    notebookDir = resolveNotebookPath(notebookPath)
+    updatedNotebooks = String[]
+
+    for notebook in readdir(notebookDir)
+        notebookFile = joinpath(notebookDir, notebook)
+
+        # notebook metadata decides which kernel Jupyter connects by default
+        if isfile(notebookFile) && endswith(lowercase(notebook), ".ipynb")
+            if setNotebookKernel!(notebookFile)
+                push!(updatedNotebooks, notebookFile)
+            end
+        end
+    end
+
+    println("✓ Set notebooks to use kernel \"$(kernelDisplayName())\"")
+
+    return updatedNotebooks
 end
 
 
@@ -158,11 +261,17 @@ function setup(; threads="auto", notebookPath=defaultNotebookPath())
     # determine thread count before writing the kernelspec
     threadsInt = getThreads(threads)
 
+    # prepare the package environment before the browser kernel starts
+    preparePackageProject()
+
     # install jupyter if needed
     ensureJupyterInstalled()
 
     # env for kernel installation
-    kernelEnv = Dict("JULIA_NUM_THREADS" => string(threadsInt))
+    kernelEnv = Dict(
+        "JULIA_NUM_THREADS" => string(threads),
+        "JULIA_DEPOT_PATH" => join(DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
+    )
 
     # install/update dedicated kernel for browser notebooks
     IJulia.installkernel(
@@ -172,9 +281,6 @@ function setup(; threads="auto", notebookPath=defaultNotebookPath())
     )
 
     println("✓ Added kernel \"$(kernelName)\" to Jupyter ")
-
-    notebookDir = resolveNotebookPath(notebookPath)
-    copyNotebooks(notebookDir)
 
 end
 
