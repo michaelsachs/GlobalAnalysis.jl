@@ -14,7 +14,8 @@ include("irf.jl")
 
 # per-thread integrator cache; stores reusable ODE solver instance to avoid 
 # rebuilding solver internals on every objective call
-const IntegratorCache = [IdDict{Any, Any}() for _ in 1:Threads.maxthreadid()]
+const IntegratorCache = Dict{Int, IdDict{Any, Any}}()
+const IntegratorCacheLock = ReentrantLock()
 
 
 """
@@ -236,7 +237,14 @@ function paramToKin(t, param, odeHelpers)
     # switch solver depending on data type
     if pType == Float64
         # get thread-local cache 
-        cache = IntegratorCache[Threads.threadid()]
+        tid = Threads.threadid()
+        local cache
+        lock(IntegratorCacheLock)
+        try
+            cache = get!(IntegratorCache, tid, IdDict{Any, Any}())
+        finally
+            unlock(IntegratorCacheLock)
+        end
         # get reusable integrator or cache miss
         integrator = get(cache, rn, nothing)
 

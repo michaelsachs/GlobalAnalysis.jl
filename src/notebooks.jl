@@ -282,6 +282,28 @@ function setup(; threads="auto", notebookPath=defaultNotebookPath())
 
     println("✓ Added kernel \"$(kernelName)\" to Jupyter ")
 
+    notebookDir = resolveNotebookPath(notebookPath)
+    copyNotebooks(notebookDir)
+
+    dataDir = joinpath(notebookDir, "data")
+    isdir(dataDir) || mkpath(dataDir)
+    sourceDataDir = normpath(joinpath(@__DIR__, "..", "data"))
+    for dataFile in readdir(sourceDataDir)
+        sourceFile = joinpath(sourceDataDir, dataFile)
+        targetFile = joinpath(dataDir, dataFile)
+
+        # keep any user-edited or user-added data files intact
+        if isfile(sourceFile) && !ispath(targetFile)
+            cp(sourceFile, targetFile)
+        end
+    end
+    println("✓ Copied example data to $(dataDir)")
+
+    setNotebookKernels!(notebookDir)
+
+    println("✓ Setup complete!")
+
+    return nothing
 end
 
 """
