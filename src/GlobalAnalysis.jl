@@ -6,6 +6,10 @@ include("fits.jl")
 include("plots.jl")
 include("notebooks.jl")
 
+function __init__()
+    setPlotDefaults!()
+end
+
 export DataStruct, SSRMetaData
 export importData, importDataVectors, maskData
 export getOdeTime, convolveIRF
@@ -15,6 +19,7 @@ export paramToKin, paramToData, paramToResiduals, paramToResidualsVec
 export setupSSRMetaData, projectSSR, paramToSSR, paramToSSRParallel
 export getLabels, getParamConfidence, paramToDataCI, printFitResult
 export getNumFitVar, calculateAdjR2, calculateChiSq, calculateAICc, calculateBIC
+export setPlotDefaults!
 export setup, launch
 
 end #module
