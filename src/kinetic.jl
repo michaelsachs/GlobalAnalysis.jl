@@ -255,7 +255,7 @@ function paramToKin(t, param, odeHelpers)
         # cache-miss (first time a thread sees rn, or after
         # cache is cleared)
         if integrator === nothing
-            prob = ODEProblem(rn, u0v, tspan, ksv; saveat=tOde,
+            prob = ODEProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv); saveat=tOde,
                 save_everystep=false, dense=false)
             sol = solve(prob, AutoTsit5(Rosenbrock23()))
             # initialize solver state
