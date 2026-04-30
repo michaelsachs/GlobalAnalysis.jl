@@ -36,6 +36,10 @@ using GlobalAnalysis
     @test GlobalAnalysis.kernelSpecName() == "juliaga-$(VERSION.major).$(VERSION.minor)"
     @test GlobalAnalysis.kernelDisplayName() == "JuliaGA $(VERSION.major).$(VERSION.minor)"
     @test GlobalAnalysis.kernelArguments() == ["--project=$(GlobalAnalysis.packageProjectPath())"]
+    @test GlobalAnalysis.kernelEnvironment(:auto)["JULIA_NUM_THREADS"] == string(autoThreads)
+    @test GlobalAnalysis.kernelEnvironment("auto")["JULIA_NUM_THREADS"] == string(autoThreads)
+    @test GlobalAnalysis.kernelEnvironment(4)["JULIA_NUM_THREADS"] == "4"
+    @test haskey(GlobalAnalysis.kernelEnvironment(4), "JULIA_DEPOT_PATH")
 
     notebookFile = joinpath(notebookDir, "kernelTest.ipynb")
     write(

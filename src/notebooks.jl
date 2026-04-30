@@ -240,6 +240,23 @@ kernelArguments() = ["--project=$(packageProjectPath())"]
 
 
 """
+    kernelEnvironment(threads)
+
+Returns the environment variables used by the GlobalAnalysis notebook
+kernel. `threads` accepts the same values as [`getThreads`](@ref), but is
+normalized to a concrete integer before being written to the kernelspec.
+"""
+function kernelEnvironment(threads)
+    threadsInt = getThreads(threads)
+
+    return Dict(
+        "JULIA_NUM_THREADS" => string(threadsInt),
+        "JULIA_DEPOT_PATH" => join(DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
+    )
+end
+
+
+"""
     ensureJupyterInstalled()
 
 Checks whether Jupyter is available to IJulia. If IJulia is using its
@@ -278,19 +295,13 @@ Registers the `JuliaGA` Jupyter kernel for browser notebooks.
 """
 function setup(; threads="auto", notebookPath=defaultNotebookPath())
     # determine thread count before writing the kernelspec
-    threadsInt = getThreads(threads)
+    kernelEnv = kernelEnvironment(threads)
 
     # prepare the package environment before the browser kernel starts
     preparePackageProject()
 
     # install jupyter if needed
     ensureJupyterInstalled()
-
-    # env for kernel installation
-    kernelEnv = Dict(
-        "JULIA_NUM_THREADS" => string(threads),
-        "JULIA_DEPOT_PATH" => join(DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
-    )
 
     # install/update dedicated kernel for browser notebooks
     IJulia.installkernel(
