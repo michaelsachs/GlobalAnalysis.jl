@@ -4,7 +4,7 @@ The kinetic model module offers the flexibility to specify custom kinetic models
 
 ## Model definition
 
-We define kinetic models in the form of reaction networks as implemented in *Catalyst.jl*. *DifferentialEquations.jl* then generates the differential equations that describe the reaction network, optimizes them for simulation, and solves them numerically.
+We define kinetic models in the form of reaction networks as implemented in *Catalyst.jl*. *Catalyst.jl* generates the differential equations that describe the reaction network, which are then solved numerically with *DifferentialEquations.jl*.
 
 To illustrate the use of reaction networks, consider a Michaelis-Menten enzyme-catalyzed reaction:
 
@@ -16,13 +16,13 @@ The enzyme `E` reacts with a substrate `S` to form an enzyme-substrate complex `
 
 ```julia
 rn = @reaction_network begin
-    k1, S + E --> SE
-    k2, SE --> S + E
-    k3, SE --> P + E
+    k1, S + E --> ES
+    k2, ES --> S + E
+    k3, ES --> P + E
 end
 ```
 
-Note that each reaction has been assigned a rate constant `k1`, `k2`, or `k3`. In this way, use of the `@reaction_network` macro facilitates simple configuration of complicated reaction models. 
+Note that each reaction has been assigned a rate constant `k1`, `k2`, or `k3`. In this way, use of the `@reaction_network` macro facilitates simple configuration of complicated reaction models.
 
 To numerically solve differential equations, we need the following pieces of information:
 
@@ -34,7 +34,7 @@ To numerically solve differential equations, we need the following pieces of inf
 Let's choose a set of parameters for these values:
 ```julia
 # initial conditions
-u0 = [:S => 300, :E => 100, :SE => 0, :P => 0] 
+u0 = [:S => 300, :E => 100, :ES => 0, :P => 0]
 
 # rate constants
 p = [:k1 => 0.001, :k2 => 0.0001, :k3 => 0.1]
@@ -54,28 +54,57 @@ Some further examples of how to set up reaction networks can be found in the *Ex
 
 While we can simulate our reaction kinetics to infinite time resolution, an experimental setup imposes a finite time resolution. To accurately reproduce experimental data, we therefore need to take into account the instrument response function (IRF) of the system.
 
-IRFs are often approximated as a Gaussian with a defined center $μ$ and standard deviation $σ$, defining its position and width in time, respectively. This Gaussian is then convolved with the kinetic traces obtained from the differential equation solver. In the resulting convolved traces, $μ$ controls when signal onset occurs and $σ$ determines how sharply the signal sets on. Here, we can optimize both $μ$ and $σ$ as part of our within our fitting procedure.
+IRFs are often approximated as a Gaussian with a defined center $μ$ and standard deviation $σ$, defining its position and width in time, respectively. This Gaussian is then convolved with the kinetic traces obtained from the differential equation solver. In the resulting convolved traces, $μ$ controls when signal onset occurs and $σ$ determines how sharply the signal sets on. Here, we can optimize both $μ$ and $σ$ as part of our fitting procedure.
 
 ## Fitting procedure
 
-The kinetic module performs a global fit of a 2D dataset, which can be described as described as follows:
- 
+The kinetic module performs a global fit of a 2D dataset, which can be described as follows:
 
 ```math
 \psi(t,\gamma) = \sum_{l=1}^{n_{comp}} c_l(t) \epsilon_l(\gamma)
 ```
 
-Here, $\psi(t,\gamma)$ is the spectally and time resolved data, $c_l(t)$ is the population of species $l$ at time $t$, and $\epsilon_l(\gamma)$ is the spectral spectral signature of component $l$ at energy/wavelength/wavenumber $\gamma$. 
+Here, $\psi(t,\gamma)$ is the spectrally and time resolved data, $c_l(t)$ is the population of species $l$ at time $t$, and $\epsilon_l(\gamma)$ is the spectral signature of component $l$ at energy/wavelength/wavenumber $\gamma$.
 
 The global analysis procedure involves the following steps:
 
 1. **Choose a kinetic model.** Use the `@reaction_network` macro to define a kinetic model.
 1. **Generate kinetic traces.** Differential equations are generated from the reaction network and solved numerically.
-1. **IRF convolution.** The kinetic traces are convolved with a Gaussian instrument response. 
+1. **IRF convolution.** The kinetic traces are convolved with a Gaussian instrument response.
 1. **Recover spectral signatures.** The spectral signatures corresponding to the simulated kinetic traces are produced from the experimental data using matrix division.
-1. **Iterative optimization.** Parameters, rate constants, and instrument response parameters are varied iteratively within the ranges defined in `limits` to maximise the fit between simulated and experimental data.
+1. **Iterative optimization.** Parameters, rate constants, and instrument response parameters are varied iteratively within the ranges defined in `limits` to maximize the fit between simulated and experimental data.
 1. **Refine kinetic model.** Tune the kinetic model based on physical intuition and fit quality.
 
+
+## Fit results and confidence intervals
+
+The main results used by the later notebook cells are `fitParam`, the optimized fit parameters, and `fitData`, `fitSpc`, and `fitKin`, which are the reconstructed dataset, recovered species spectra, and fitted kinetic traces. `printFitResult` maps the fitted values back to their parameter names.
+
+The parameter confidence intervals are controlled by `confidenceLevel`, for example `0.95` for 95% confidence intervals. To show how this parameter uncertainty affects the fitted kinetics and spectra, the notebook uses `paramToDataCI`, which draws Monte Carlo samples from the fitted parameter distribution and recalculates the model for each sample. The shaded confidence bands in the plots are calculated from the quantiles of these sampled kinetics and spectra. Increasing `samples` makes these bands smoother, but also increases the calculation time.
+
+## Adapting the example notebook
+
+The example notebook `notebooks/kineticModel.ipynb` can usually be adapted to your own experiment by changing only three parts:
+
+1. Point `file` to your own `.csv` dataset, formatted as described in the *File format* section of the import documentation.
+1. Replace the reaction network `rn` with the kinetic model you want to test.
+1. Update the `limits` dictionary with suitable initial populations, rate constants, and IRF parameters.
+
+If the dataset is imported with `importData` from the documented `.csv` format, the notebook variables `s`, `t`, and `d` can be used as-is.
+
+The `limits` dictionary must contain every species and rate constant used in `rn`, as well as the IRF parameters `:μ` and `:σ`. A single number fixes a value during the fit, while a two-value vector defines the lower and upper fit bounds. For example, a simple model with species `A` and `B` and rate constant `k1` could use:
+
+```julia
+limits = Dict(
+    :A => 1,              # fixed initial population
+    :B => 0,              # fixed initial population
+    :k1 => [0.1, 10.0],   # fitted rate constant
+    :μ => [-0.5, 0.5],    # fitted IRF center
+    :σ => [0.04, 0.2]     # fitted IRF width
+)
+```
+
+After these inputs are defined, the notebook preprocesses the model with `setupVariables(rn, limits)` and runs the optimization. The optimization cell uses `paramToSSRParallel` to evaluate trial parameter sets in parallel for faster fits. In most cases, you only need to adjust `maxIter` if the convergence plot indicates that the fit has not yet stabilized.
 
 
 ## Examples
@@ -88,7 +117,7 @@ To illustrate the use of different kinetic models, we look at examples where we 
 
 ### Assembling synthetic data
 
-We define a set of first order reaction kinetics where species `A` converts to `B`, `B` converts to `C`, and `C` decays to the ground state:
+We define a set of first-order reaction kinetics where species `A` converts to `B`, `B` converts to `C`, and `C` decays to the ground state:
 
 ```math
 A \xrightarrow{k_1} B \xrightarrow{k_2} C \xrightarrow{k_3} 0
@@ -104,7 +133,7 @@ rn = @reaction_network begin
 end
 ```
 
-Next we choose initial amplitudes, rate constants, and instrument response function parameters. Given the sequential nature of the reaction, `A` is initialised to `1`, whereas `B` and `C` are initialised to `0`. We set the rate constants in decreasing order `k1 = 1`, `k2 = 0.1`, `k3 = 0.01` as otherwise no buildup of species `B` and `C` is observed. Finally, we use a Gaussian as an IRF with an offset of `μ = 0.2` and a standard deviation of `σ = 0.1`.
+Next we choose initial amplitudes, rate constants, and instrument response function parameters. Given the sequential nature of the reaction, `A` is initialized to `1`, whereas `B` and `C` are initialized to `0`. We set the rate constants in decreasing order `k1 = 1`, `k2 = 0.1`, `k3 = 0.01`, because otherwise no buildup of species `B` and `C` is observed. Finally, we use a Gaussian as an IRF with an offset of `μ = 0.2` and a standard deviation of `σ = 0.1`.
 
 ```julia
  Dict(
@@ -122,15 +151,15 @@ From these parameters, we obtain the following kinetic traces:
 
 ![Alt text](./assets/Synthetic_first_order_kinetics.svg)
 
-By matrix multiplying spectral signatures and kinetic traces, we generate a 2D dataset, which is the sum of the temporal evolutions of all three spectral components. In addition, some noise is added to replicate experimental conditions more closely. This dataset can be found in `\data\testData_first_order_seq.csv`.
+By multiplying spectral signatures and kinetic traces, we generate a 2D dataset, which is the sum of the temporal evolutions of all three spectral components. In addition, some noise is added to replicate experimental conditions more closely. This dataset can be found in `data/testData_first_order_seq.csv`.
 
 ![Alt text](./assets/Synthetic_first_order_data.svg)
 
 ### Global fit
 
-The recovery of spectral signatures and experimental parameters from the generated synthetic dataset is shown in the example notebook `/notebooks/kineticModel.ipynb`.
+The recovery of spectral signatures and experimental parameters from the generated synthetic dataset is shown in the example notebook `notebooks/kineticModel.ipynb`.
 
-For a global fit, we assume a kinetic model and test how well it fits the experimental data. Here, we know the used sequential model and thus define the reaction network `rn` and the initial amplitudes of the involved species as above. In the case of a reaction network composed solely of first order reactions, reaction rates are independent of the species' populations, meaning that it only matters whether a component is initialised with `0` or a non-zero value. 
+For a global fit, we assume a kinetic model and test how well it fits the experimental data. Here, we know the sequential model used to generate the data and thus define the reaction network `rn` and the initial amplitudes of the involved species as above. In a reaction network composed solely of first-order reactions, the time constants are independent of the absolute initial amplitudes. Since the component amplitudes can be absorbed into the recovered spectra, it mainly matters whether a component is initialized with `0` or a non-zero value.
 
 Next, we define parameter bounds for the rate constants `k1`, `k2`, and `k3`. In the case of a sequential reaction, this typically involves adjacent parameter ranges as below. Similarly, we define parameter bounds for the IRF center `μ`, reflecting the onset of the signal with respect to `t = 0`, and the standard deviation `σ`, reflecting the width of the IRF.
 
@@ -173,11 +202,11 @@ The optimized spectra closely resemble the input, except for the noise added to 
 
 ### Assembling synthetic data
 
-GlobalAnalysis.jl allows to perform a global fit involving non-first order reactions. In this example, we generate another synthetic dataset comprised of one first, one second, and one third order reaction. For example, common second and third order reactions for photogenerated charges are bimolecular recombination and Auger recombination, respectively. 
+GlobalAnalysis.jl allows you to perform a global fit involving non-first-order reactions. In this example, we generate another synthetic dataset composed of one first-, one second-, and one third-order reaction. For example, common second- and third-order reactions for photogenerated charges are bimolecular recombination and Auger recombination, respectively.
 
 We define the following reaction network, in which all three reactions proceed in parallel:
 
-```julia 
+```julia
 # define kinetic model
 rn = @reaction_network begin
     k1, A --> 0
@@ -186,7 +215,7 @@ rn = @reaction_network begin
 end
 ```
 
-Unlike for first order reactions, the reaction rates of higher order reactions depend on the carrier concentration. As such, we need to assign physically meaningful initial carrier concentrations for our species in order to obtain physically meaningful rate constants. For example, let's assume we generate `A`, `B`, and `C` with initial concentrations of 1e17 $cm^{-3}$ - a common value for laser experiments. 
+Unlike for first-order reactions, the reaction rates of higher-order reactions depend on the carrier concentration. As such, we need to assign physically meaningful initial carrier concentrations for our species in order to obtain physically meaningful rate constants. For example, let's assume we generate `A`, `B`, and `C` with initial concentrations of 1e17 $cm^{-3}$ - a common value for laser experiments.
 
 1e17 $cm^{-3}$ is a rather large number and may cause numerical difficulties, but we can convert it to a more manageable 1e5 $\mu m^{-3}$. Assuming that our time axis is in ps, we choose rate constants of 1 $ps^{-1}$ for the first-order `k1`, 1e-5 $\mu m^{3} ps^{-1}$ for the second-order `k2`, and 1e-9 $\mu m^{6} ps^{-1}$ for the third-order `k3`. The IRF parameters are the same as in the previous example.
 
@@ -207,7 +236,7 @@ This reaction network and parameters yield the following kinetic traces:
 
 ![Alt text](./assets/Synthetic_mixed_order_kinetics.svg)
 
-We use the same spectral signatures as above to generate a synthetic 2D dataset, again with added noise. The resulting dataset can be found in `\data\testData_mixed_order_par.csv`.
+We use the same spectral signatures as above to generate a synthetic 2D dataset, again with added noise. The resulting dataset can be found in `data/testData_mixed_order_par.csv`.
 
 ![Alt text](./assets/Synthetic_mixed_order_data.svg)
 
@@ -237,14 +266,14 @@ The input kinetics are recovered reliably:
 
 ![Alt text](./assets/Mixed_order_fit_kinetics.svg)
 
-Similarly, the spectral signatures are recovered, with an additional scaling factor arising from a normalization of the 2D data to keep the amplitudes in the data comparable to the first order example.
+Similarly, the spectral signatures are recovered, with an additional scaling factor arising from a normalization of the 2D data to keep the amplitudes in the data comparable to the first-order example.
 
 ![Alt text](./assets/Mixed_order_fit_spectra.svg)
 
 
 ## Fixed parameters
 
-Parameters in the `limits` dictionary can be fitted or fixed. A fit parameter is defined as a range of two numbers, setting the upper and lower bound for the fit. A fixed parameter is supplied as a single value.
+Parameters in the `limits` dictionary can be fitted or fixed. A fit parameter is defined as a range of two numbers, setting the lower and upper bound for the fit. A fixed parameter is supplied as a single value.
 
 For example, let's take the first-order sequential model above and assume we know that `k2 = 0.1`. `k2` can therefore be included as a single value in `limits`, indicating that it has a fixed value:
 
@@ -255,7 +284,7 @@ limits = Dict(
     :C => 0,
     :k1 => [5e-1, 5],
     # k2 now fixed
-    :k2 => 0.1, 
+    :k2 => 0.1,
     :k3 => [5e-3, 5e-2],
     :μ => [-0.5, 0.5],
     :σ => [0.04, 0.2]
@@ -272,6 +301,19 @@ k3: 0.010009089474607503 ± 4.692754124732182e-5
 
 ## Model refinement
 
-Refining a kinetic model is an iterative process. It is often necessary to test several different models as well as different parameter bounds in order to achieve an satisfactory fit. 
+Refining a kinetic model is an iterative process. It is often necessary to test several different models as well as different parameter bounds in order to achieve a satisfactory fit.
 
-The kinetic model notebook produces residual maps, illustrating the difference between the the achieved fit and the experimental data. In the ideal case the residual map will only contain noise, as the fit fully captures the features in the experimental data. If features are observed in the residual maps this means there are aspects of the data not captured by the used kinetic model within the chosen parameter bounds, and the amplitude of these residual features can be used to guide the refinement of the model and/or its parameters. 
+The kinetic model notebook produces residual maps, illustrating the difference between the achieved fit and the experimental data. In the ideal case the residual map will only contain noise, as the fit fully captures the features in the experimental data. If features are observed in the residual maps, there are aspects of the data not captured by the kinetic model within the chosen parameter bounds, and the amplitude of these residual features can be used to guide refinement of the model and/or its parameters.
+
+### Fit quality and model selection
+
+The notebook also calculates several fit quality criteria that can help compare candidate models fitted to the same dataset:
+
+- **Adjusted R-squared** describes how much of the data variance is explained by the model, while penalizing the number of fitted parameters. Values closer to `1` indicate a better fit.
+- **Chi-square** measures the residuals relative to an estimate of the experimental noise. In the notebook, this noise is estimated from the pre-time-zero region of the experimental data. Time zero is assumed to be at `0` and the pre-time-zero region is therefore `t .< 0` in the code; if your time zero is different, adjust this value to get correct chi-square estimates. The reduced chi-square divides this value by the degrees of freedom; values near `1` indicate that the residuals are comparable to the estimated noise.
+- **Corrected Akaike Information Criterion (AICc)** compares fit quality while penalizing additional fitted parameters. Lower values are better, and AICc is generally useful when comparing several plausible models on the same dataset.
+- **Bayesian Information Criterion (BIC)** is similar to AICc, but penalizes extra fitted parameters more strongly. Lower values are better, and BIC tends to favor simpler models.
+
+These criteria should be considered together with the residual maps and physical plausibility of the kinetic model. A more complicated model is only worth keeping if it removes structured residuals and clearly improves AICc or BIC; if the criteria are similar, the simpler physically meaningful model is usually preferred.
+
+When comparing different datasets, use these values more cautiously. AICc and BIC should only be compared between models fitted to the same dataset, because their absolute values depend on the number of data points, data scaling, and residual variance. Raw chi-square also depends strongly on the number of data points and the noise estimate. Adjusted R-squared and reduced chi-square are more useful as rough diagnostics across datasets: adjusted R-squared should be close to `1`, and reduced chi-square should be close to `1` if the noise estimate is realistic. However, a slightly better value on one dataset does not by itself prove that the kinetic model is more appropriate than on another dataset, because different datasets can have different noise levels, time ranges, and spectral complexity.
