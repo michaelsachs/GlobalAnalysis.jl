@@ -123,6 +123,23 @@ end
 
 
 """
+    makeFileWritable!(path)
+
+Ensures a copied notebook can be updated after package installs that mark
+source files as read-only.
+"""
+function makeFileWritable!(path)
+    isfile(path) || return path
+
+    if filemode(path) & 0o200 == 0
+        chmod(path, filemode(path) | 0o200)
+    end
+
+    return path
+end
+
+
+"""
     copyNotebooks(notebookPath; sourcePath=packageNotebookPath())
 
 Copies notebooks from `sourcePath` into `notebookPath`. Existing files are
@@ -141,6 +158,7 @@ function copyNotebooks(notebookPath; sourcePath=packageNotebookPath())
         # do not overwrite notebooks the user may have edited
         if !ispath(targetFile)
             cp(sourceFile, targetFile)
+            makeFileWritable!(targetFile)
             push!(copiedNotebooks, targetFile)
         end
     end
@@ -176,6 +194,7 @@ function setNotebookKernel!(notebookPath)
     )
 
     if updatedNotebook != notebook
+        makeFileWritable!(notebookFile)
         write(notebookFile, updatedNotebook)
         return true
     end
