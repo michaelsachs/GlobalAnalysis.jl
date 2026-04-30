@@ -334,5 +334,7 @@ function launch(; notebookPath=defaultNotebookPath())
     notebookDir = resolveNotebookPath(notebookPath)
     isdir(notebookDir) || throw(ArgumentError("notebookPath does not exist: $notebookDir"))
 
+    setNotebookKernels!(notebookDir)
+
     return IJulia.notebook(dir=notebookDir)
 end
