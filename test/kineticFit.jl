@@ -67,6 +67,23 @@ end
     end
 end
 
+@testset "Parallel SSR Objective Handles Changing IRF Grids" begin
+    problem = buildSequentialFitProblem()
+    lo = problem.bounds[:, 1]
+    hi = problem.bounds[:, 2]
+    batch = Matrix{Float64}(undef, 24, length(lo))
+
+    for n in axes(batch, 1)
+        frac = (n - 1) / (size(batch, 1) - 1)
+        batch[n, :] .= lo .+ frac .* (hi .- lo)
+    end
+
+    ssr = paramToSSRParallel(problem.t, batch, problem.d, problem.odeHelpers, problem.ssrData)
+
+    @test length(ssr) == size(batch, 1)
+    @test all(isfinite, ssr)
+end
+
 function runSequentialFitRegression(; seed=1234, iterations=30, population=8)
     problem = buildSequentialFitProblem()
     objective = param -> paramToSSR(problem.t, param, problem.d, problem.odeHelpers, problem.ssrData)
