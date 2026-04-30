@@ -1,39 +1,139 @@
-These setup instructions assume no prior Julia installation and will walk you through the steps to set up Julia, a code editor, and GlobalAnalysis.jl.
+# Installation
 
+This package is designed to take advantage of all available CPU cores to speed up fits and processing. Julia calls the parallel workers it uses for this `threads`. This package performs best if the number of Julia threads is set to the number of physical CPU cores.
+
+The number of physical CPU cores is not straightforward to determine automatically, so it is best to provide it manually during setup. To figure out how many cores your CPU has, search for something like *"How many cores does my Intel i5-10400 have?"*. If you do not provide the number of cores, the setup will figure out a number automatically; if that number is different from the number of physical cores, you may get slightly slower fits, but the results will remain the same.
 
 ## Installing Julia
 
-Download the current stable Julia release from <https://julialang.org/downloads/> and install it. Note down the path of the Julia executable as we will need it later; e.g., under Windows this could be `C:\Users\Michael\Julia\Julia-1.9.4\bin\julia.exe`.
+Download and install the current stable Julia release from <https://julialang.org/downloads/>. The recommended installer is Juliaup, which is the default installation method on the Julia download page.
 
-## Setting up VS Code
+After installation, open a terminal:
 
-A convenient way to take advantage of Julia's multithreading capabilities in Jupyter notebooks is to run them in the code editor Visual Studio Code. 
+- Windows: open PowerShell or Windows Terminal.
+- macOS: open Terminal.
+- Linux: open your usual terminal.
 
-Download VS Code from <https://code.visualstudio.com/Download> and install it. Next, we will install the Julia extension in VS Code. Start VS Code and click on *Extensions* in the left menu bar. Search for *julia* and then click to install the official extension:
+Start Julia with the number of physical CPU cores you found. For example, for a CPU with 6 cores:
 
-!["VS Code screenshot showing the Julia extension"](./assets/julia_extension.PNG)
+```bash
+julia -t 6
+```
 
-Finally, we will point VS Code to our Julia installation and enable multithreading. To this end, go to `File > Preferences > Settings` from the top menu bar in VS code. 
-- **Executable path.** In the search bar, enter *julia executable*, which should bring up *Julia: Executable Path*. Here, paste the path you have noted during the Julia installation.
-- **Mulithreading.** In the search bar, enter *julia threads*, which should bring up *Julia: Num Threads*. Click on *Edit in settings.json*. This step takes you to a file called *settings.json*, where you will find `"julia.NumThreads"` with some default value assigned. Replace the default value with the number of threads on your machine (typically twice the number of cores), if you know it; for example, `"julia.NumThreads": 16` for a machine with 8 cores. If you do not know this information, use `"julia.NumThreads": "auto"` to automatically detect how many threads to use.
+If you do not know the number of physical CPU cores, use automatic threading instead:
 
-VS Code and Julia are now set up. To verify that everything is working, you can press `Ctrl + Shift + P` (Windows/Linux) / `Shift + Command + P` (Mac) to bring up the command palette, and look for `Julia: Start REPL`. Selecting this option will bring up Julia's terminal within VS Code, indicated by the appearance of a green `julia>`. You can enter a simple command like `1 + 2`, which should return the expected result.
+```bash
+julia -t auto
+```
 
+You should see a prompt that looks like this:
 
-## Setting up GlobalAnalysis.jl
+```julia
+julia>
+```
 
+Starting Julia from the terminal is useful because the number of threads has to be set when Julia starts. `setup()` configures the future notebook kernel, but it cannot change the number of threads in the Julia session that is already running `setup()`.
 
-- Go to *Source Control* in the left menu bar and click *Clone Repository*. If *Clone Repository* is not available, you will be prompted to *Download Git*, which is required to work with repositories: follow the shown link and download and install *Git* - during the installation process, you can keep the default selected options. After restarting VS Code, *Clone Repository* should be available.
+If `julia -t 6` or `julia -t auto` is not found, close and reopen the terminal first. If it still does not work, Julia was not added to your system path during installation. In that case, you can still start Julia from the Julia application and continue with the steps below; setup may just take longer the first time.
 
-!["VS Code screenshot showing the clone repo dialogue"](./assets/clone_repo.png)
+## Installing GlobalAnalysis.jl
 
-- A window appears at the top; paste `https://github.com/michaelsachs/GlobalAnalysis.jl` here
-- A popup window asks where you want to save the repository folder. Pick any directory you like and click *Select as Repository Destination*
-- A popup asks whether you want to open the new repository. Click *Open*
-- Press `Ctrl + Shift + P` (Windows/Linux) / `Shift + Command + P` (Mac) to bring up the command palette, and look for `Julia: Start REPL`
-- Press `]` to switch to the package manager 
-- Type `instantiate` and press enter. This will download and precompile all required packages, which may take a few minutes
-- In the file explorer (top icon in the left menu bar), navigate to the `notebooks` folder and select the notebook you want to run
-- For example, select `kineticModel.ipynb` an click `Run all` to ensure everything is working. If you are prompted to choose a kernel, select `Julia` and then the Julia version you have installed in the previous step
-- Note that the first execution of Julia code after opening a notebook will trigger the compilation of the used functions, which can take a few seconds. The second excecution onwards then uses the existing compilation and will be much faster. The compilation is retained until the notebook is closed.
+At the threaded Julia prompt, press `]` to enter Julia's package manager. The prompt changes from `julia>` to something ending in `pkg>`.
 
+Then run:
+
+```julia-repl
+pkg> add https://github.com/michaelsachs/GlobalAnalysis.jl
+```
+
+This downloads GlobalAnalysis.jl and its Julia dependencies. The first installation can take a few minutes.
+
+Press Backspace to return to the normal `julia>` prompt.
+
+## Setting up notebooks
+
+At the Julia prompt, first load the package:
+
+```julia
+using GlobalAnalysis
+```
+
+An initial one-time setup prepares the environment for the analysis notebooks. Before running the setup, decide whether you want to change the defaults for the browser notebook workflow:
+
+- `threads`: number of Julia threads used by the notebook kernel. Choose the number of CPU cores if you know that number.
+- `notebookPath`: folder where the example notebooks and example data are copied. If not provided, a `GlobalAnalysis.jl` folder will be created in your home directory and used for that purpose.
+
+If you know the number of physical CPU cores, provide it to `setup()`. For example, for a CPU with 6 cores:
+
+```julia
+setup(threads=6)
+```
+
+To place the notebooks somewhere else, use:
+
+```julia
+setup(notebookPath=raw"C:\Users\YourName\Documents\GlobalAnalysis")
+```
+
+If the folder does not exist, it will be created.
+
+You can also set both options at once:
+
+```julia
+setup(threads=6, notebookPath=raw"C:\Users\YourName\Documents\GlobalAnalysis")
+```
+
+Alternatively, if you want to run with the default options, simply use:
+
+```julia
+setup()
+```
+
+You can rerun `setup()` later if you want to change the thread count or notebook folder. Existing notebooks and data files are not overwritten, so your edits are safe when rerunning `setup()`.
+
+## Launching notebooks
+
+After setup, start the browser notebook interface. If you used a custom notebook folder, launch the same folder with:
+
+```julia
+launch(notebookPath=raw"C:\Users\YourName\Documents\GlobalAnalysis")
+```
+
+If not, just run:
+
+```julia
+launch()
+```
+
+Jupyter should open in your browser. The copied notebooks are configured to use the multithreaded `JuliaGA` kernel automatically. To get started, open `kineticModel.ipynb` and run the cells.
+
+The first execution after starting a kernel will take longer because Julia compiles the required functions. Later executions in the same session are much faster.
+
+## Updating
+
+To update an installed version of GlobalAnalysis.jl, press `]` to enter the package manager and run:
+
+```julia-repl
+pkg> update GlobalAnalysis
+```
+
+Press Backspace to return to the normal `julia>` prompt.
+
+Then restart the notebook kernel so the notebook loads the updated package code.
+
+## Optional: Using VS Code for development
+
+This step is not required for normal use. VS Code is useful if you want to edit the code of GlobalAnalysis.jl itself or develop new functionality. For that workflow:
+
+1. Install VS Code from <https://code.visualstudio.com/Download>.
+2. Install the official Julia extension.
+3. Clone `https://github.com/michaelsachs/GlobalAnalysis.jl`.
+4. Open the repository folder in VS Code.
+5. Start a Julia REPL in VS Code.
+6. Press `]` to enter the package manager and run:
+
+```julia-repl
+pkg> instantiate
+```
+
+This developer workflow is separate from the browser notebook setup above.
