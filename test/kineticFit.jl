@@ -1,10 +1,11 @@
 using Test
 using Random
 using LinearAlgebra
+using Statistics
 using Metaheuristics
-
-include(joinpath(@__DIR__, "..", "src", "import.jl"))
-include(joinpath(@__DIR__, "..", "src", "kinetic.jl"))
+using Catalyst
+using GlobalAnalysis
+using NaNStatistics
 
 const sequentialFitReferenceParam = [
     0.9977211681177615,
@@ -23,19 +24,6 @@ const sequentialFitParamTolerance = [
 ]
 
 const sequentialFitSampleIdx = [101, 102, 143, 196, 237, 301, 372, 436, 507, 571]
-
-const sequentialFitReferenceKin = [
-    0.023043777755121196 8.148492458492275e-5 2.7594832041848413e-6
-    0.16023410936201843 0.0007955373525667625 3.5969236312177794e-5
-    0.5064316548893468 0.003811772907254229 0.0002414005405283092
-    0.9692364276184998 0.02504975016490156 0.0043442183814653545
-    0.9227387492217802 0.05268157458436241 0.024507375130612005
-    0.7561448745312697 0.07755566110601918 0.16439312484031207
-    0.372931870293659 0.04168028543065749 0.5563703676716216
-    0.05076514126213349 0.005671712716481053 0.7708358656866977
-    4.1318669844827724e-5 4.618575714033562e-6 0.4113395884672498
-    -9.114668339194349e-18 -1.0188778065957368e-18 0.05591643996260802
-]
 
 function buildSequentialFitProblem()
     file = joinpath(@__DIR__, "..", "data", "testData_first_order_seq.csv")
@@ -62,7 +50,8 @@ function buildSequentialFitProblem()
 
     _, bounds, odeHelpers = setupVariables(rn, limits)
     ssrData = setupSSRMetaData(d)
-    return (; t, d, bounds, odeHelpers, ssrData)
+    species = odeHelpers[5]
+    return (; t, d, bounds, odeHelpers, ssrData, species)
 end
 
 @testset "Direct SSR Objective Matches Residual Path" begin
@@ -100,21 +89,26 @@ function runSequentialFitRegression(; seed=1234, iterations=30, population=8)
 
     fitParam = minimizer(result)
     _, _, fitKin = paramToData(problem.t, fitParam, problem.d, problem.odeHelpers)
+    _, _, referenceKin = paramToData(problem.t, sequentialFitReferenceParam, problem.d, problem.odeHelpers)
 
-    return (; result, fitParam, fitKin)
+    return (; result, fitParam, fitKin, referenceKin, species=problem.species)
 end
 
 @testset "Sequential Kinetic Fit Regression" begin
     regression = runSequentialFitRegression()
     fitParam = regression.fitParam
-    sampledKin = regression.fitKin[sequentialFitSampleIdx, :]
+    referenceSpecies = [:A, :B, :C]
+    speciesOrder = [findfirst(==(species), regression.species) for species in referenceSpecies]
+    @test all(!isnothing, speciesOrder)
+    sampledKin = regression.fitKin[sequentialFitSampleIdx, Int.(speciesOrder)]
+    sampledReferenceKin = regression.referenceKin[sequentialFitSampleIdx, Int.(speciesOrder)]
 
     # objective stays in the good-fit basin
     @test minimum(regression.result) < 700.0
     # fitted parameters remain near the reference solution
     @test all(abs.(fitParam .- sequentialFitReferenceParam) .<= sequentialFitParamTolerance)
     # no sampled kinetic point drifts too far
-    @test maximum(abs.(sampledKin .- sequentialFitReferenceKin)) < 0.1
+    @test maximum(abs.(sampledKin .- sampledReferenceKin)) < 0.1
     # overall sampled kinetics remain close in norm
-    @test norm(sampledKin .- sequentialFitReferenceKin) / norm(sequentialFitReferenceKin) < 0.08
+    @test norm(sampledKin .- sampledReferenceKin) / norm(sampledReferenceKin) < 0.08
 end
