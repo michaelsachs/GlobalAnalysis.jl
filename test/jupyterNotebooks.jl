@@ -33,6 +33,7 @@ using GlobalAnalysis
     @test GlobalAnalysis.defaultNotebookPath() == normpath(joinpath(homedir(), "GlobalAnalysis.jl"))
     @test GlobalAnalysis.resolveNotebookPath(notebookDir) == normpath(abspath(notebookDir))
     @test GlobalAnalysis.kernelName == "JuliaGA"
+    @test GlobalAnalysis.jupyterCondaPackage == "notebook<7"
     @test GlobalAnalysis.kernelSpecName() == "juliaga-$(VERSION.major).$(VERSION.minor)"
     @test GlobalAnalysis.kernelDisplayName() == "JuliaGA $(VERSION.major).$(VERSION.minor)"
     @test GlobalAnalysis.kernelArguments() == ["--project=$(GlobalAnalysis.packageProjectPath())"]
