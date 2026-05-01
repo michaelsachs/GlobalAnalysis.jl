@@ -2,6 +2,7 @@ using IJulia
 using Pkg
 
 const kernelName = "JuliaGA"
+const jupyterCondaPackage = "notebook<7"
 
 """
     packageNotebookPath()
@@ -47,7 +48,7 @@ kernelDisplayName() = "$(kernelName) $(VERSION.major).$(VERSION.minor)"
 """
     preparePackageProject()
 
-Instantiates and precompiles the package project used by the notebook kernel.
+Instantiates the package project used by the notebook kernel.
 """
 function preparePackageProject()
     activeProject = Base.active_project()
@@ -58,7 +59,6 @@ function preparePackageProject()
         # project that the installed Jupyter kernel will actually launch
         Pkg.activate(packageProject)
         Pkg.instantiate()
-        Pkg.precompile()
     finally
         if activeProject !== nothing
             Pkg.activate(activeProject)
@@ -273,7 +273,7 @@ function ensureJupyterInstalled()
     if dirname(jupyter) == abspath(scriptDir) && !Sys.isexecutable(IJulia.exe(jupyter, "-notebook"))
         # install once during setup so launch can open without prompting
         IJulia.get_Conda() do Conda
-            Conda.add("jupyter")
+            Conda.add(jupyterCondaPackage)
         end
         
         println("✓ Installed Jupyter")
