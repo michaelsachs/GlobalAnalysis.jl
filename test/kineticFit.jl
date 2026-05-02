@@ -65,6 +65,10 @@ end
         ssr = nansum(abs2.(residuals))
         @test isapprox(direct, ssr; rtol=1e-6, atol=1e-6)
     end
+
+    badParam = copy(center)
+    badParam[1] = NaN
+    @test isinf(paramToSSR(problem.t, badParam, problem.d, problem.odeHelpers, problem.ssrData))
 end
 
 @testset "Parallel SSR Objective Handles Changing IRF Grids" begin

@@ -7,7 +7,7 @@ using LinearAlgebra
 using MonteCarloMeasurements
 using OrdinaryDiffEqRosenbrock: Rosenbrock23
 using OrdinaryDiffEqTsit5: AutoTsit5, Tsit5
-using SciMLBase: ODEProblem, reinit!
+using SciMLBase: ODEProblem, reinit!, successful_retcode
 using SciMLStructures
 
 include("irf.jl")
@@ -16,6 +16,16 @@ include("irf.jl")
 # rebuilding solver internals on every objective call
 const IntegratorCache = Dict{Int, IdDict{Any, Any}}()
 const IntegratorCacheLock = ReentrantLock()
+
+
+struct OdeSolveFailure <: Exception
+    retcode
+end
+
+function Base.showerror(io::IO, err::OdeSolveFailure)
+    print(io, "ODE solve failed with retcode ", err.retcode)
+end
+
 
 
 """
@@ -314,6 +324,11 @@ function paramToKin(t, param, odeHelpers)
         sol = solve(prob, Tsit5())
     end
 
+    # check that solver succeeded
+    successful_retcode(sol.retcode) || throw(OdeSolveFailure(sol.retcode))
+    # check that solver returned all requested time points
+    length(sol.t) == length(tOde) || throw(OdeSolveFailure(:IncompleteSaveGrid))
+
     kin = transpose(Array(sol))
 
     # convolve kinetic traces with IRF
@@ -466,7 +481,17 @@ data. Used for parameter optimization.
 reused across objective evaluations.
 """
 function paramToSSR(t, param, Data, odeHelpers, ssrData::SSRMetaData)
-    kinConv = paramToKin(t, param, odeHelpers)
+    # guard against invalid parameters
+    all(isfinite, param) || return Inf
+
+    kinConv = try
+        paramToKin(t, param, odeHelpers)
+    catch err
+        # skip to next iteration for solve failures
+        err isa OdeSolveFailure && return Inf
+        # throw other unexpected errors
+        rethrow()
+    end
 
     if ssrData.hasNaN
         # slower path if Data contains NaN
