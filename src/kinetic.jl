@@ -271,7 +271,7 @@ function paramToKin(t, param, odeHelpers)
         if Threads.nthreads() > 1
             prob = ODEProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv); saveat=tOde,
                 save_everystep=false, dense=false)
-            sol = solve(prob, AutoTsit5(Rosenbrock23()))
+            sol = solve(prob, AutoTsit5(Rosenbrock23()); verbose=false)
         else
             # get thread-local cache 
             tid = Threads.threadid()
@@ -290,9 +290,9 @@ function paramToKin(t, param, odeHelpers)
                     !hasSameOdeGrid(cachedIntegrator[2], tOde)
                 prob = ODEProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv); saveat=tOde,
                     save_everystep=false, dense=false)
-                sol = solve(prob, AutoTsit5(Rosenbrock23()))
+                sol = solve(prob, AutoTsit5(Rosenbrock23()); verbose=false)
                 # initialize solver state
-                integrator = init(prob, AutoTsit5(Rosenbrock23()))
+                integrator = init(prob, AutoTsit5(Rosenbrock23()); verbose=false)
                 # store integrator with the save grid it was initialized for
                 cache[rn] = (integrator, copy(tOde))
             # cache lookup found compatible existing integrator
@@ -321,7 +321,7 @@ function paramToKin(t, param, odeHelpers)
     else
         prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde, save_everystep=false, dense=false)
         # Rosenbrock23 requires unsafe comparisons for Particles, avoid for now
-        sol = solve(prob, Tsit5())
+        sol = solve(prob, Tsit5(); verbose=false)
     end
 
     # check that solver succeeded
