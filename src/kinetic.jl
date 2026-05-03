@@ -16,6 +16,7 @@ include("irf.jl")
 # rebuilding solver internals on every objective call
 const IntegratorCache = Dict{Int, IdDict{Any, Any}}()
 const IntegratorCacheLock = ReentrantLock()
+const OdeProblemBuildLock = ReentrantLock()
 
 
 struct OdeSolveFailure <: Exception
@@ -26,6 +27,17 @@ function Base.showerror(io::IO, err::OdeSolveFailure)
     print(io, "ODE solve failed with retcode ", err.retcode)
 end
 
+
+function buildOdeProblem(args...; kwargs...)
+    # ModelingToolkit problem construction mutates symbolic caches,
+    # so protect it from concurrent threaded objective evaluations.
+    lock(OdeProblemBuildLock)
+    try
+        return ODEProblem(args...; kwargs...)
+    finally
+        unlock(OdeProblemBuildLock)
+    end
+end
 
 
 """
@@ -269,7 +281,7 @@ function paramToKin(t, param, odeHelpers)
         ksv = collect(ks)
 
         if Threads.nthreads() > 1
-            prob = ODEProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv); saveat=tOde,
+            prob = buildOdeProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv); saveat=tOde,
                 save_everystep=false, dense=false)
             sol = solve(prob, AutoTsit5(Rosenbrock23()); verbose=false)
         else
@@ -288,7 +300,7 @@ function paramToKin(t, param, odeHelpers)
             # cache miss, stale save grid, or stale tspan
             if cachedIntegrator === nothing ||
                     !hasSameOdeGrid(cachedIntegrator[2], tOde)
-                prob = ODEProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv); saveat=tOde,
+                prob = buildOdeProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv); saveat=tOde,
                     save_everystep=false, dense=false)
                 sol = solve(prob, AutoTsit5(Rosenbrock23()); verbose=false)
                 # initialize solver state
@@ -319,7 +331,7 @@ function paramToKin(t, param, odeHelpers)
         end
     # for MonteCarloMeasurements 
     else
-        prob = ODEProblem(rn, u0, tspan, ks; saveat=tOde, save_everystep=false, dense=false)
+        prob = buildOdeProblem(rn, u0, tspan, ks; saveat=tOde, save_everystep=false, dense=false)
         # Rosenbrock23 requires unsafe comparisons for Particles, avoid for now
         sol = solve(prob, Tsit5(); verbose=false)
     end
