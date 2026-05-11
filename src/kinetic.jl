@@ -8,6 +8,7 @@ using MonteCarloMeasurements
 using OrdinaryDiffEqRosenbrock: Rosenbrock23
 using OrdinaryDiffEqTsit5: AutoTsit5, Tsit5
 using SciMLBase: ODEProblem, remake, successful_retcode
+using SciMLStructures
 
 include("irf.jl")
 
@@ -18,15 +19,33 @@ const OdeProblemCacheLock = ReentrantLock()
 const OdeProblemBuildLock = ReentrantLock()
 
 
+struct OdeProblemCacheEntry{P}
+    baseProb::P
+    rateToTunable::Vector{Int}
+    u0ToInitials::Vector{Int}
+    baseInitials::Vector{Float64}
+    tunableBuffer::Vector{Float64}
+    initialsBuffer::Vector{Float64}
+end
+
+
 struct OdeSolveFailure <: Exception
     retcode
 end
 
+
+"""
+Formats `OdeSolveFailure` exceptions with the solver return code.
+"""
 function Base.showerror(io::IO, err::OdeSolveFailure)
     print(io, "ODE solve failed with retcode ", err.retcode)
 end
 
 
+"""
+Builds an `ODEProblem` while serializing ModelingToolkit problem construction,
+which mutates shared symbolic caches.
+"""
 function buildOdeProblem(args...; kwargs...)
     # ModelingToolkit problem construction mutates symbolic caches,
     # so protect it from concurrent threaded objective evaluations.
@@ -39,6 +58,71 @@ function buildOdeProblem(args...; kwargs...)
 end
 
 
+"""
+Returns distinct marker values that can be safely inserted into parameter or
+initial-condition storage to recover internal ModelingToolkit indices.
+"""
+function markerValues(n, existingValues)
+    n == 0 && return Float64[]
+    existingMax = isempty(existingValues) ? 0.0 : maximum(abs, existingValues)
+    # create marker values that stand out from existing values
+    markerStart = max(existingMax, 1.0) + 10_000.0
+    return markerStart .+ (1.0:n)
+end
+
+
+"""
+Maps marker values back to their unique positions in a marked ModelingToolkit
+storage vector.
+"""
+function markerIndices(markedValues, markers, label)
+    indices = Vector{Int}(undef, length(markers))
+    for n in eachindex(markers)
+        marker = markers[n]
+        idx = findall(==(marker), markedValues)
+        length(idx) == 1 ||
+            error("Could not map $(label) into ModelingToolkit parameter storage")
+        indices[n] = only(idx)
+    end
+    return indices
+end
+
+
+"""
+Precomputes the parameter and initial-condition index mapping needed to remake
+a cached `ODEProblem` for new numeric inputs.
+"""
+function setupOdeProblemCacheEntry(prob, species, rateConst)
+    tunables = SciMLStructures.canonicalize(SciMLStructures.Tunable(), prob.p)[1]
+    rateMarkers = markerValues(length(rateConst), tunables)
+    rateMarkerProb = remake(prob; p=Pair.(rateConst, rateMarkers))
+    markedTunables = SciMLStructures.canonicalize(
+        SciMLStructures.Tunable(), rateMarkerProb.p)[1]
+    rateToTunable = markerIndices(markedTunables, rateMarkers, "rate constants")
+
+    baseInitials = copy(SciMLStructures.canonicalize(
+        SciMLStructures.Initials(), prob.p)[1])
+    u0Markers = markerValues(length(species), baseInitials)
+    u0MarkerProb = remake(prob; u0=Pair.(species, u0Markers))
+    markedInitials = SciMLStructures.canonicalize(
+        SciMLStructures.Initials(), u0MarkerProb.p)[1]
+    u0ToInitials = markerIndices(markedInitials, u0Markers, "initial conditions")
+
+    return OdeProblemCacheEntry(
+        prob,
+        rateToTunable,
+        u0ToInitials,
+        baseInitials,
+        similar(tunables),
+        similar(baseInitials),
+    )
+end
+
+
+"""
+Returns the ODE problem cache for the current Julia thread, creating it on first
+use.
+"""
 function getThreadOdeProblemCache()
     tid = Threads.threadid()
     lock(OdeProblemCacheLock)
@@ -50,25 +134,45 @@ function getThreadOdeProblemCache()
 end
 
 
-function remakeOdeProblem(baseProb, species, rateConst, u0v, ksv, tspan, tOde)
-    return remake(baseProb; u0=Pair.(species, u0v), p=Pair.(rateConst, ksv),
-        tspan=tspan, saveat=tOde,
+"""
+Remakes a cached `ODEProblem` with new initial conditions, rate constants,
+time span, and save grid without rebuilding the symbolic problem.
+"""
+function remakeOdeProblem(entry::OdeProblemCacheEntry, u0v, ksv, tspan, tOde)
+    @inbounds for n in eachindex(entry.rateToTunable)
+        entry.tunableBuffer[n] = ksv[entry.rateToTunable[n]]
+    end
+
+    copyto!(entry.initialsBuffer, entry.baseInitials)
+    @inbounds for n in eachindex(entry.u0ToInitials)
+        entry.initialsBuffer[entry.u0ToInitials[n]] = u0v[n]
+    end
+
+    p = SciMLStructures.replace(
+        SciMLStructures.Tunable(), entry.baseProb.p, entry.tunableBuffer)
+    p = SciMLStructures.replace(SciMLStructures.Initials(), p, entry.initialsBuffer)
+
+    return remake(entry.baseProb; u0=u0v, p=p, tspan=tspan, saveat=tOde,
         save_everystep=false, dense=false)
 end
 
 
+"""
+Returns an `ODEProblem` for the current thread, reusing a cached symbolic
+problem for `rn` when available.
+"""
 function cachedOdeProblem(rn, species, rateConst, u0v, ksv, tspan, tOde)
     cache = getThreadOdeProblemCache()
-    baseProb = get(cache, rn, nothing)
+    cacheEntry = get(cache, rn, nothing)
 
-    if baseProb === nothing
+    if cacheEntry === nothing
         prob = buildOdeProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv);
             saveat=tOde, save_everystep=false, dense=false)
-        cache[rn] = prob
+        cache[rn] = setupOdeProblemCacheEntry(prob, species, rateConst)
         return prob
     end
 
-    return remakeOdeProblem(baseProb, species, rateConst, u0v, ksv, tspan, tOde)
+    return remakeOdeProblem(cacheEntry, u0v, ksv, tspan, tOde)
 end
 
 
