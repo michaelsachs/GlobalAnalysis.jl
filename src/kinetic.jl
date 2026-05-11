@@ -1,5 +1,5 @@
 using Catalyst
-using CommonSolve: init, solve, solve!
+using CommonSolve: solve
 using NaNStatistics
 using Distributions
 using FiniteDiff
@@ -7,15 +7,14 @@ using LinearAlgebra
 using MonteCarloMeasurements
 using OrdinaryDiffEqRosenbrock: Rosenbrock23
 using OrdinaryDiffEqTsit5: AutoTsit5, Tsit5
-using SciMLBase: ODEProblem, reinit!, successful_retcode
-using SciMLStructures
+using SciMLBase: ODEProblem, remake, successful_retcode
 
 include("irf.jl")
 
-# per-thread integrator cache; stores reusable ODE solver instance to avoid 
-# rebuilding solver internals on every objective call
-const IntegratorCache = Dict{Int, IdDict{Any, Any}}()
-const IntegratorCacheLock = ReentrantLock()
+# per-thread ODE problem cache; stores reusable symbolic/numeric problem
+# structure to avoid rebuilding ModelingToolkit internals on every objective call
+const OdeProblemCache = Dict{Int, IdDict{Any, Any}}()
+const OdeProblemCacheLock = ReentrantLock()
 const OdeProblemBuildLock = ReentrantLock()
 
 
@@ -40,21 +39,36 @@ function buildOdeProblem(args...; kwargs...)
 end
 
 
-"""
-Returns whether a cached ODE integrator can be reused for `tOde`.
+function getThreadOdeProblemCache()
+    tid = Threads.threadid()
+    lock(OdeProblemCacheLock)
+    try
+        return get!(OdeProblemCache, tid, IdDict{Any, Any}())
+    finally
+        unlock(OdeProblemCacheLock)
+    end
+end
 
-The IRF parameters alter the solver save grid during fitting. Reusing an
-integrator with stale `saveat`/tstop state can make OrdinaryDiffEq step past
-its expected stops, so cached integrators are only reused for identical grids.
-"""
-function hasSameOdeGrid(cachedTOde, tOde)
-    length(cachedTOde) == length(tOde) || return false
 
-    @inbounds for n in eachindex(tOde)
-        cachedTOde[n] == tOde[n] || return false
+function remakeOdeProblem(baseProb, species, rateConst, u0v, ksv, tspan, tOde)
+    return remake(baseProb; u0=Pair.(species, u0v), p=Pair.(rateConst, ksv),
+        tspan=tspan, saveat=tOde,
+        save_everystep=false, dense=false)
+end
+
+
+function cachedOdeProblem(rn, species, rateConst, u0v, ksv, tspan, tOde)
+    cache = getThreadOdeProblemCache()
+    baseProb = get(cache, rn, nothing)
+
+    if baseProb === nothing
+        prob = buildOdeProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv);
+            saveat=tOde, save_everystep=false, dense=false)
+        cache[rn] = prob
+        return prob
     end
 
-    return true
+    return remakeOdeProblem(baseProb, species, rateConst, u0v, ksv, tspan, tOde)
 end
 
 
@@ -276,59 +290,12 @@ function paramToKin(t, param, odeHelpers)
 
     # switch solver depending on data type
     if pType == Float64
-        # turn views into arrays for use with reinit
+        # turn views into arrays for SciML problem construction/remake
         u0v = collect(u0)
         ksv = collect(ks)
 
-        if Threads.nthreads() > 1
-            prob = buildOdeProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv); saveat=tOde,
-                save_everystep=false, dense=false)
-            sol = solve(prob, AutoTsit5(Rosenbrock23()); verbose=false)
-        else
-            # get thread-local cache 
-            tid = Threads.threadid()
-            local cache
-            lock(IntegratorCacheLock)
-            try
-                cache = get!(IntegratorCache, tid, IdDict{Any, Any}())
-            finally
-                unlock(IntegratorCacheLock)
-            end
-            # get reusable integrator or cache miss
-            cachedIntegrator = get(cache, rn, nothing)
-
-            # cache miss, stale save grid, or stale tspan
-            if cachedIntegrator === nothing ||
-                    !hasSameOdeGrid(cachedIntegrator[2], tOde)
-                prob = buildOdeProblem(rn, Pair.(species, u0v), tspan, Pair.(rateConst, ksv); saveat=tOde,
-                    save_everystep=false, dense=false)
-                sol = solve(prob, AutoTsit5(Rosenbrock23()); verbose=false)
-                # initialize solver state
-                integrator = init(prob, AutoTsit5(Rosenbrock23()); verbose=false)
-                # store integrator with the save grid it was initialized for
-                cache[rn] = (integrator, copy(tOde))
-            # cache lookup found compatible existing integrator
-            else
-                integrator = cachedIntegrator[1]
-                # makes sure reinitialization runs with the intended parameters
-                integrator.p = SciMLStructures.replace(
-                    SciMLStructures.Tunable(), 
-                    integrator.p, ksv)
-
-                # retarget cached integrator for the next parameter evaluation
-                reinit!(integrator, u0v; t0=tspan[1], tf=tspan[2],
-                    saveat=tOde, erase_sol=true, reset_dt=true,
-                    reinit_cache=true, reinit_callbacks=true,
-                    initialize_save=true)
-
-                # safety step, because reinit may overwrite stored parameters
-                integrator.p = SciMLStructures.replace(
-                    SciMLStructures.Tunable(),
-                    integrator.p, ksv)
-
-                sol = solve!(integrator)
-            end
-        end
+        prob = cachedOdeProblem(rn, species, rateConst, u0v, ksv, tspan, tOde)
+        sol = solve(prob, AutoTsit5(Rosenbrock23()); verbose=false)
     # for MonteCarloMeasurements 
     else
         prob = buildOdeProblem(rn, u0, tspan, ks; saveat=tOde, save_everystep=false, dense=false)

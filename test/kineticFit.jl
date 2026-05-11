@@ -83,9 +83,17 @@ end
     end
 
     ssr = paramToSSRParallel(problem.t, batch, problem.d, problem.odeHelpers, problem.ssrData)
+    sequentialSSR = [
+        paramToSSR(problem.t, batch[n, :], problem.d, problem.odeHelpers, problem.ssrData)
+        for n in axes(batch, 1)
+    ]
+    reversedSSR = paramToSSRParallel(problem.t, reverse(batch; dims=1), problem.d,
+        problem.odeHelpers, problem.ssrData)
 
     @test length(ssr) == size(batch, 1)
     @test all(isfinite, ssr)
+    @test ssr ≈ sequentialSSR rtol=1e-8 atol=1e-6
+    @test reversedSSR ≈ reverse(ssr) rtol=1e-8 atol=1e-6
 end
 
 function runSequentialFitRegression(; seed=1234, iterations=30, population=8)
