@@ -43,6 +43,16 @@ jobs:
           julia --project=. -e 'using Pkg; Pkg.instantiate()'
           julia --project=scripts/sysimage -e 'using Pkg; Pkg.instantiate()'
 
+      - name: Add Linux swap
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
       - name: Build release sysimage
         shell: bash
         env:
