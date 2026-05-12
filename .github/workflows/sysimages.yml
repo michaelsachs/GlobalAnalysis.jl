@@ -22,10 +22,13 @@ jobs:
         include:
           - os: ubuntu-latest
             label: linux-x86_64
+            cpu-target: generic
           - os: windows-latest
             label: windows-x86_64
+            cpu-target: generic
           - os: macos-15
             label: macos-aarch64
+            cpu-target: apple-m1
 
     steps:
       - uses: actions/checkout@v6
@@ -44,7 +47,7 @@ jobs:
         shell: bash
         env:
           GA_SYSIMAGE_KIND: release
-          JULIA_CPU_TARGET: generic
+          JULIA_CPU_TARGET: ${{ matrix.cpu-target }}
         run: julia --project=scripts/sysimage scripts/sysimage/build.jl release
 
       - name: Strip release sysimage
