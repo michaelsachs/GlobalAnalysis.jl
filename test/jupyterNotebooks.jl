@@ -36,6 +36,10 @@ using GlobalAnalysis
     @test GlobalAnalysis.jupyterCondaPackage == "notebook<7"
     @test GlobalAnalysis.kernelSpecName() == "juliaga-$(VERSION.major).$(VERSION.minor)"
     @test GlobalAnalysis.kernelDisplayName() == "JuliaGA $(VERSION.major).$(VERSION.minor)"
+    @test GlobalAnalysis.kernelSpecName(sysimage=:release) == "juliaga-$(VERSION.major).$(VERSION.minor)-sysimg"
+    @test GlobalAnalysis.kernelDisplayName(sysimage=:release) == "JuliaGA $(VERSION.major).$(VERSION.minor) (sysimg)"
+    @test GlobalAnalysis.kernelSpecName(sysimage=:dev) == "juliaga-$(VERSION.major).$(VERSION.minor)-dev-sysimg"
+    @test GlobalAnalysis.kernelDisplayName(sysimage=:dev) == "JuliaGA $(VERSION.major).$(VERSION.minor) (dev sysimg)"
     @test GlobalAnalysis.kernelArguments() == ["--project=$(GlobalAnalysis.packageProjectPath())"]
     @test GlobalAnalysis.kernelEnvironment(:auto)["JULIA_NUM_THREADS"] == string(autoThreads)
     @test GlobalAnalysis.kernelEnvironment("auto")["JULIA_NUM_THREADS"] == string(autoThreads)

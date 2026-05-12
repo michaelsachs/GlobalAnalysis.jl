@@ -1,0 +1,72 @@
+name: Build Sysimages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  release-sysimage:
+    name: release sysimage (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+          - os: windows-latest
+            label: windows-x86_64
+          - os: macos-15
+            label: macos-aarch64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+
+      - name: Instantiate projects
+        shell: bash
+        run: |
+          julia --project=. -e 'using Pkg; Pkg.instantiate()'
+          julia --project=scripts/sysimage -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Build release sysimage
+        shell: bash
+        env:
+          GA_SYSIMAGE_KIND: release
+          JULIA_CPU_TARGET: generic
+        run: julia --project=scripts/sysimage scripts/sysimage/build.jl release
+
+      - name: Strip release sysimage
+        shell: bash
+        run: julia --project=scripts/sysimage scripts/sysimage/strip.jl release
+
+      - name: Compress release sysimage
+        shell: bash
+        run: julia --project=scripts/sysimage scripts/sysimage/compress.jl release
+
+      - name: Upload compressed sysimage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: GlobalAnalysis-release-${{ matrix.label }}-julia-1.12
+          path: build/sysimages/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Attach compressed sysimage to GitHub release
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" build/sysimages/*.tar.gz --clobber

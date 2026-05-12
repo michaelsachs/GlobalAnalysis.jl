@@ -2,8 +2,7 @@
 using LinearAlgebra
 LinearAlgebra.BLAS.set_num_threads(1)
 
-include("import.jl")
-include("kinetic.jl")
-include("plots.jl")
-
+using Catalyst
+using GlobalAnalysis
 using Metaheuristics
+using Plots
