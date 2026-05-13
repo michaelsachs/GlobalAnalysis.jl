@@ -41,8 +41,8 @@ julia --project=scripts/sysimage scripts/sysimage/compress.jl release
 ```
 
 On Apple Silicon release builders, use `apple-m1` instead of `generic`. The
-build Julia process must start with the same CPU target that will be embedded
-in the sysimage so PackageCompiler does not trace host-only CPU feature methods.
+build pins PackageCompiler helper processes and HostCPUFeatures preferences to
+the same CPU target so it does not trace host-only CPU feature methods.
 
 The compression step writes a `.tar.gz` file. GitHub Actions uploads that
 compressed sysimg as a workflow artifact and, for published GitHub releases,

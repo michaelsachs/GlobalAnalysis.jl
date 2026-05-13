@@ -1,6 +1,10 @@
 using PackageCompiler
+using TOML
 
 include("common.jl")
+
+const HOST_CPU_FEATURES_PREFS = "HostCPUFeatures"
+const HOST_CPU_FEATURES_UUID = "3e5b6fbb-0976-4d2c-9146-d79de83f2fb0"
 
 const DEV_PACKAGES = [
     :CSV,
@@ -136,6 +140,55 @@ function alignPackageCompilerHelperCpuTarget!(kind::AbstractString, cpu_target::
     return nothing
 end
 
+"""
+    withHostCpuFeaturesPreferences(kind, cpu_target) do
+        ...
+    end
+
+Temporarily freezes HostCPUFeatures to the release CPU target. Packages such as
+VectorizationBase generate method bodies from HostCPUFeatures constants; without
+this, a cached host-specific feature set can emit instructions the portable
+sysimage target cannot lower.
+"""
+function withHostCpuFeaturesPreferences(f::Function, kind::AbstractString, cpu_target::AbstractString)
+    kind = gaNormalizeKind(kind)
+    (kind == "release" && !occursin("native", cpu_target)) || return f()
+
+    project_path = joinpath(GA_REPO_ROOT, "Project.toml")
+    preferences_path = joinpath(GA_REPO_ROOT, "LocalPreferences.toml")
+    previous_project = read(project_path, String)
+    had_preferences = isfile(preferences_path)
+    previous_preferences = had_preferences ? read(preferences_path, String) : nothing
+    preference_target = first(split(cpu_target, ';'))
+
+    try
+        project = TOML.parse(previous_project)
+        extras = get!(project, "extras", Dict{String,Any}())
+        extras[HOST_CPU_FEATURES_PREFS] = HOST_CPU_FEATURES_UUID
+        open(project_path, "w") do io
+            TOML.print(io, project; sorted=true)
+        end
+
+        preferences = had_preferences ? TOML.parse(previous_preferences) : Dict{String,Any}()
+        host_preferences = get!(preferences, HOST_CPU_FEATURES_PREFS, Dict{String,Any}())
+        host_preferences["cpu_target"] = preference_target
+        host_preferences["freeze_cpu_target"] = true
+        open(preferences_path, "w") do io
+            TOML.print(io, preferences; sorted=true)
+        end
+
+        println("HostCPUFeatures CPU target preference: ", preference_target)
+        return f()
+    finally
+        write(project_path, previous_project)
+        if had_preferences
+            write(preferences_path, previous_preferences)
+        else
+            rm(preferences_path; force=true)
+        end
+    end
+end
+
 kind = gaKindFromArgs()
 mkpath(GA_BUILD_DIR)
 
@@ -158,15 +211,17 @@ println("Process CPU target: ", Base.unsafe_string(Base.JLOptions().cpu_target))
 println("Build args: ", isempty(build_args.exec) ? "(default)" : join(build_args.exec, " "))
 println("Packages:   ", join(string.(packages), ", "))
 
-create_sysimage(
-    packages;
-    project=GA_REPO_ROOT,
-    sysimage_path=sysimage_path,
-    precompile_execution_file=workload,
-    cpu_target=cpu_target,
-    sysimage_build_args=build_args,
-    incremental=true,
-)
+withHostCpuFeaturesPreferences(kind, cpu_target) do
+    create_sysimage(
+        packages;
+        project=GA_REPO_ROOT,
+        sysimage_path=sysimage_path,
+        precompile_execution_file=workload,
+        cpu_target=cpu_target,
+        sysimage_build_args=build_args,
+        incremental=true,
+    )
+end
 
 println("Wrote sysimage: ", sysimage_path)
 println("Run `julia --project=scripts/sysimage scripts/sysimage/stage.jl $(kind)` to install it in the default staged location.")
