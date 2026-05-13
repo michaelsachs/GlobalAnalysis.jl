@@ -39,9 +39,11 @@ jobs:
 
       - name: Instantiate projects
         shell: bash
+        env:
+          JULIA_CPU_TARGET: ${{ matrix.cpu-target }}
         run: |
-          julia --project=. -e 'using Pkg; Pkg.instantiate()'
-          julia --project=scripts/sysimage -e 'using Pkg; Pkg.instantiate()'
+          julia --cpu-target="$JULIA_CPU_TARGET" --project=. -e 'using Pkg; Pkg.instantiate()'
+          julia --cpu-target="$JULIA_CPU_TARGET" --project=scripts/sysimage -e 'using Pkg; Pkg.instantiate()'
 
       - name: Add Linux swap
         if: runner.os == 'Linux'
@@ -61,7 +63,7 @@ jobs:
         env:
           GA_SYSIMAGE_KIND: release
           JULIA_CPU_TARGET: ${{ matrix.cpu-target }}
-        run: julia --project=scripts/sysimage scripts/sysimage/build.jl release
+        run: julia --cpu-target="$JULIA_CPU_TARGET" --project=scripts/sysimage scripts/sysimage/build.jl release
 
       - name: Strip release sysimage
         shell: bash

@@ -34,10 +34,15 @@ Plain `setup()` registers the normal kernel and then tries to install the
 ## Release Build
 
 ```powershell
-julia --project=scripts/sysimage scripts/sysimage/build.jl release
+$env:JULIA_CPU_TARGET = "generic"
+julia --cpu-target="$env:JULIA_CPU_TARGET" --project=scripts/sysimage scripts/sysimage/build.jl release
 julia --project=scripts/sysimage scripts/sysimage/strip.jl release
 julia --project=scripts/sysimage scripts/sysimage/compress.jl release
 ```
+
+On Apple Silicon release builders, use `apple-m1` instead of `generic`. The
+build Julia process must start with the same CPU target that will be embedded
+in the sysimage so PackageCompiler does not trace host-only CPU feature methods.
 
 The compression step writes a `.tar.gz` file. GitHub Actions uploads that
 compressed sysimg as a workflow artifact and, for published GitHub releases,

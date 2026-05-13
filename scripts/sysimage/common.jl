@@ -88,7 +88,9 @@ function gaDefaultCpuTarget(kind::AbstractString)
     kind = gaNormalizeKind(kind)
     # Local dev images can be machine-specific. Release artifacts should run
     # across the runner architecture rather than only the exact CI CPU model.
-    return kind == "dev" ? "native" : "generic"
+    kind == "dev" && return "native"
+    Sys.isapple() && Sys.ARCH === :aarch64 && return "apple-m1"
+    return "generic"
 end
 
 """
