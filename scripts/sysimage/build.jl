@@ -126,24 +126,24 @@ function withHostCpuFeaturesPreferences(f::Function, kind::AbstractString, cpu_t
     had_preferences = isfile(preferences_path)
     previous_preferences = had_preferences ? read(preferences_path, String) : nothing
 
-    project = TOML.parse(previous_project)
-    extras = get!(project, "extras", Dict{String,Any}())
-    extras[HOST_CPU_FEATURES_PREFS] = HOST_CPU_FEATURES_UUID
-    open(project_path, "w") do io
-        TOML.print(io, project; sorted=true)
-    end
-
-    preferences = had_preferences ? TOML.parse(previous_preferences) : Dict{String,Any}()
-    host_preferences = get!(preferences, HOST_CPU_FEATURES_PREFS, Dict{String,Any}())
-    host_preferences["cpu_target"] = preference_target
-    host_preferences["freeze_cpu_target"] = true
-
-    println("HostCPUFeatures CPU target preference: ", preference_target)
-    open(preferences_path, "w") do io
-        TOML.print(io, preferences; sorted=true)
-    end
-
     try
+        project = TOML.parse(previous_project)
+        extras = get!(project, "extras", Dict{String,Any}())
+        extras[HOST_CPU_FEATURES_PREFS] = HOST_CPU_FEATURES_UUID
+        open(project_path, "w") do io
+            TOML.print(io, project; sorted=true)
+        end
+
+        preferences = had_preferences ? TOML.parse(previous_preferences) : Dict{String,Any}()
+        host_preferences = get!(preferences, HOST_CPU_FEATURES_PREFS, Dict{String,Any}())
+        host_preferences["cpu_target"] = preference_target
+        host_preferences["freeze_cpu_target"] = true
+
+        println("HostCPUFeatures CPU target preference: ", preference_target)
+        open(preferences_path, "w") do io
+            TOML.print(io, preferences; sorted=true)
+        end
+
         return f()
     finally
         write(project_path, previous_project)
