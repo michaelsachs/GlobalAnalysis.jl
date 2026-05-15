@@ -123,7 +123,21 @@ The first execution after starting a kernel will take longer because Julia compi
 
 ## Updating
 
-To update an installed version of GlobalAnalysis.jl, press `]` to enter the package manager and run:
+To update an installed version of GlobalAnalysis.jl, first make sure Juliaup is
+using the supported Julia 1.12 channel. In a regular terminal, run:
+
+```bash
+juliaup update 1.12
+juliaup default 1.12
+```
+
+Then start Julia again with your preferred number of threads, for example:
+
+```bash
+julia -t auto
+```
+
+At the Julia prompt, press `]` to enter Julia's package manager and run:
 
 ```julia-repl
 pkg> update GlobalAnalysis
@@ -131,7 +145,18 @@ pkg> update GlobalAnalysis
 
 Press Backspace to return to the normal `julia>` prompt.
 
-Then restart the notebook kernel so the notebook loads the updated package code.
+Then rerun setup so the notebook kernel is refreshed. If
+you previously used custom options such as `threads` or `notebookPath`, use the
+same options again:
+
+```julia
+using GlobalAnalysis
+setup()
+```
+
+Finally, restart the notebook kernel so the notebook loads the updated package
+code. Existing notebooks remain set to their existing kernel; manually choose
+the updated `JuliaGA` kernel from the notebook's kernel menu.
 
 ## Optional: Using VS Code for development
 
