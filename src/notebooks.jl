@@ -12,7 +12,7 @@ const sysimageReleaseBaseUrl = "https://github.com/michaelsachs/GlobalAnalysis.j
 
 Returns the notebook folder distributed with GlobalAnalysis.jl.
 """
-packageNotebookPath() = normpath(joinpath(@__DIR__, "..", "notebooks"))
+packageNotebookPath() = normpath(joinpath(packageProjectPath(), "notebooks"))
 
 
 """
@@ -28,7 +28,12 @@ defaultNotebookPath() = normpath(joinpath(homedir(), "GlobalAnalysis.jl"))
 
 Returns the package project folder used when registering the notebook kernel.
 """
-packageProjectPath() = normpath(joinpath(@__DIR__, ".."))
+function packageProjectPath()
+    packageFile = Base.find_package(string(nameof(@__MODULE__)))
+    packageFile !== nothing && return normpath(dirname(dirname(packageFile)))
+
+    return normpath(joinpath(@__DIR__, ".."))
+end
 
 
 """
@@ -610,7 +615,7 @@ function setup(; threads="auto", notebookPath=defaultNotebookPath(), sysimage=:a
 
     dataDir = joinpath(notebookDir, "data")
     isdir(dataDir) || mkpath(dataDir)
-    sourceDataDir = normpath(joinpath(@__DIR__, "..", "data"))
+    sourceDataDir = normpath(joinpath(packageProjectPath(), "data"))
     for dataFile in readdir(sourceDataDir)
         sourceFile = joinpath(sourceDataDir, dataFile)
         targetFile = joinpath(dataDir, dataFile)
