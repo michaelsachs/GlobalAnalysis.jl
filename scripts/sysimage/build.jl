@@ -91,6 +91,17 @@ function sysimageBuildArgs()
 end
 
 """
+    gaPortableReleaseBuild(kind, cpu_target)
+
+Returns whether this sysimage build is a release artifact with a non-native CPU
+target.
+"""
+function gaPortableReleaseBuild(kind::AbstractString, cpu_target::AbstractString)
+    kind = gaNormalizeKind(kind)
+    return kind == "release" && !occursin("native", cpu_target)
+end
+
+"""
     ensureBuildProcessCpuTarget(kind, cpu_target)
 
 Checks that release sysimage builds were started with the same CPU target that
@@ -98,8 +109,7 @@ will be passed to PackageCompiler. This catches the old local invocation style,
 where only the final sysimage object used the portable CPU target.
 """
 function ensureBuildProcessCpuTarget(kind::AbstractString, cpu_target::AbstractString)
-    kind = gaNormalizeKind(kind)
-    (kind == "release" && !occursin("native", cpu_target)) || return nothing
+    gaPortableReleaseBuild(kind, cpu_target) || return nothing
 
     process_target = Base.unsafe_string(Base.JLOptions().cpu_target)
     process_target == cpu_target && return nothing
@@ -119,8 +129,7 @@ compiler, but its package-precompile and workload-tracing helpers otherwise
 start with the default target and can record host-only CPU feature methods.
 """
 function alignPackageCompilerHelperCpuTarget!(kind::AbstractString, cpu_target::AbstractString)
-    kind = gaNormalizeKind(kind)
-    (kind == "release" && !occursin("native", cpu_target)) || return nothing
+    gaPortableReleaseBuild(kind, cpu_target) || return nothing
 
     @eval PackageCompiler begin
         _GA_HELPER_CPU_TARGET = $cpu_target
@@ -141,6 +150,62 @@ function alignPackageCompilerHelperCpuTarget!(kind::AbstractString, cpu_target::
 end
 
 """
+    installMacVscalePrecompileFilter!(kind, cpu_target)
+
+Installs the temporary macOS/AArch64 HostCPUFeatures.vscale trace filter.
+Remove this whole function and its call site once HostCPUFeatures, Julia, or
+PackageCompiler no longer traces `vscale()` into Apple Silicon sysimages.
+"""
+function installMacVscalePrecompileFilter!(kind::AbstractString, cpu_target::AbstractString)
+    gaPortableReleaseBuild(kind, cpu_target) || return nothing
+    (Sys.isapple() && Sys.ARCH === :aarch64) || return nothing
+
+    if !isdefined(PackageCompiler, :_GA_RUN_PRECOMPILATION_SCRIPT)
+        @eval PackageCompiler const _GA_RUN_PRECOMPILATION_SCRIPT = run_precompilation_script
+    end
+
+    vscale_pattern = "HostCPUFeatures.vscale"
+
+    @eval PackageCompiler begin
+        function run_precompilation_script(
+            project::String,
+            sysimg::String,
+            precompile_file::Union{String,Nothing},
+            precompile_dir::String,
+        )
+            tracefile = _GA_RUN_PRECOMPILATION_SCRIPT(
+                project,
+                sysimg,
+                precompile_file,
+                precompile_dir,
+            )
+            if isfile(tracefile)
+                statements = readlines(tracefile)
+                filtered = filter(statement -> !occursin($vscale_pattern, statement), statements)
+                removed = length(statements) - length(filtered)
+
+                if removed > 0
+                    open(tracefile, "w") do io
+                        for statement in filtered
+                            println(io, statement)
+                        end
+                    end
+                    println(
+                        "Filtered ",
+                        removed,
+                        " HostCPUFeatures.vscale precompile statement(s) from ",
+                        tracefile,
+                    )
+                end
+            end
+            return tracefile
+        end
+    end
+
+    return nothing
+end
+
+"""
     withHostCpuFeaturesPreferences(kind, cpu_target) do
         ...
     end
@@ -151,8 +216,7 @@ this, a cached host-specific feature set can emit instructions the portable
 sysimage target cannot lower.
 """
 function withHostCpuFeaturesPreferences(f::Function, kind::AbstractString, cpu_target::AbstractString)
-    kind = gaNormalizeKind(kind)
-    (kind == "release" && !occursin("native", cpu_target)) || return f()
+    gaPortableReleaseBuild(kind, cpu_target) || return f()
 
     project_path = joinpath(GA_REPO_ROOT, "Project.toml")
     preferences_path = joinpath(GA_REPO_ROOT, "LocalPreferences.toml")
@@ -201,6 +265,7 @@ packages = packagesForKind(kind)
 
 ensureBuildProcessCpuTarget(kind, cpu_target)
 alignPackageCompilerHelperCpuTarget!(kind, cpu_target)
+installMacVscalePrecompileFilter!(kind, cpu_target)
 
 println("Repository: ", GA_REPO_ROOT)
 println("Kind:       ", kind)
