@@ -26,9 +26,11 @@ jobs:
           - os: windows-latest
             label: windows-x86_64
             cpu-target: generic
-          - os: macos-15
-            label: macos-aarch64
-            cpu-target: apple-m1
+          # Temporarily disabled until the macOS AArch64 HostCPUFeatures
+          # vscale sysimage failure can be debugged on a local Mac.
+          # - os: macos-15
+          #   label: macos-aarch64
+          #   cpu-target: apple-m1
 
     steps:
       - uses: actions/checkout@v6
