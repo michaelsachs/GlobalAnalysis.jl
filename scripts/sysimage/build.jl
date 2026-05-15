@@ -150,59 +150,49 @@ function alignPackageCompilerHelperCpuTarget!(kind::AbstractString, cpu_target::
 end
 
 """
-    installMacVscalePrecompileFilter!(kind, cpu_target)
+    macVscaleFilteredTrace(kind, cpu_target, workload)
 
-Installs the temporary macOS/AArch64 HostCPUFeatures.vscale trace filter.
+Manually traces the macOS/AArch64 release workload and filters
+HostCPUFeatures.vscale precompile statements. Returns a filtered trace file, or
+`nothing` when the normal PackageCompiler workload path should be used.
+
 Remove this whole function and its call site once HostCPUFeatures, Julia, or
 PackageCompiler no longer traces `vscale()` into Apple Silicon sysimages.
 """
-function installMacVscalePrecompileFilter!(kind::AbstractString, cpu_target::AbstractString)
+function macVscaleFilteredTrace(
+    kind::AbstractString,
+    cpu_target::AbstractString,
+    workload::AbstractString,
+)
     gaPortableReleaseBuild(kind, cpu_target) || return nothing
     (Sys.isapple() && Sys.ARCH === :aarch64) || return nothing
 
-    if !isdefined(PackageCompiler, :_GA_RUN_PRECOMPILATION_SCRIPT)
-        @eval PackageCompiler const _GA_RUN_PRECOMPILATION_SCRIPT = run_precompilation_script
-    end
+    trace_dir = mktempdir()
+    raw_trace = joinpath(trace_dir, "precompile_raw.jl")
+    filtered_trace = joinpath(trace_dir, "precompile_filtered.jl")
+    trace_cmd = `$(PackageCompiler.get_julia_cmd()) --project=$GA_REPO_ROOT --trace-compile=$raw_trace $workload`
 
-    vscale_pattern = "HostCPUFeatures.vscale"
+    println("Tracing macOS AArch64 workload for filtered precompile statements: ", workload)
+    run(trace_cmd)
 
-    @eval PackageCompiler begin
-        function run_precompilation_script(
-            project::String,
-            sysimg::String,
-            precompile_file::Union{String,Nothing},
-            precompile_dir::String,
-        )
-            tracefile = _GA_RUN_PRECOMPILATION_SCRIPT(
-                project,
-                sysimg,
-                precompile_file,
-                precompile_dir,
-            )
-            if isfile(tracefile)
-                statements = readlines(tracefile)
-                filtered = filter(statement -> !occursin($vscale_pattern, statement), statements)
-                removed = length(statements) - length(filtered)
+    statements = isfile(raw_trace) ? readlines(raw_trace) : String[]
+    filtered = filter(statement -> !occursin("HostCPUFeatures.vscale", statement), statements)
+    removed = length(statements) - length(filtered)
 
-                if removed > 0
-                    open(tracefile, "w") do io
-                        for statement in filtered
-                            println(io, statement)
-                        end
-                    end
-                    println(
-                        "Filtered ",
-                        removed,
-                        " HostCPUFeatures.vscale precompile statement(s) from ",
-                        tracefile,
-                    )
-                end
-            end
-            return tracefile
+    open(filtered_trace, "w") do io
+        for statement in filtered
+            println(io, statement)
         end
     end
 
-    return nothing
+    println(
+        "Filtered ",
+        removed,
+        " HostCPUFeatures.vscale precompile statement(s) from ",
+        raw_trace,
+    )
+
+    return filtered_trace
 end
 
 """
@@ -265,7 +255,6 @@ packages = packagesForKind(kind)
 
 ensureBuildProcessCpuTarget(kind, cpu_target)
 alignPackageCompilerHelperCpuTarget!(kind, cpu_target)
-installMacVscalePrecompileFilter!(kind, cpu_target)
 
 println("Repository: ", GA_REPO_ROOT)
 println("Kind:       ", kind)
@@ -277,11 +266,16 @@ println("Build args: ", isempty(build_args.exec) ? "(default)" : join(build_args
 println("Packages:   ", join(string.(packages), ", "))
 
 withHostCpuFeaturesPreferences(kind, cpu_target) do
+    filtered_trace = macVscaleFilteredTrace(kind, cpu_target, workload)
+    precompile_execution_files = filtered_trace === nothing ? workload : String[]
+    precompile_statement_files = filtered_trace === nothing ? String[] : [filtered_trace]
+
     create_sysimage(
         packages;
         project=GA_REPO_ROOT,
         sysimage_path=sysimage_path,
-        precompile_execution_file=workload,
+        precompile_execution_file=precompile_execution_files,
+        precompile_statements_file=precompile_statement_files,
         cpu_target=cpu_target,
         sysimage_build_args=build_args,
         incremental=true,
