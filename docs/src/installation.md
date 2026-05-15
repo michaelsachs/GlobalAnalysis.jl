@@ -6,13 +6,25 @@ The number of physical CPU cores is not straightforward to determine automatical
 
 ## Installing Julia
 
-Download and install the current stable Julia release from <https://julialang.org/downloads/>. The recommended installer is Juliaup, which is the default installation method on the Julia download page.
+Download and install Juliaup from <https://julialang.org/downloads/>. Juliaup
+is the default installation method on the Julia download page.
 
-After installation, open a terminal:
+The current GlobalAnalysis.jl release provides prebuilt sysimages for Julia
+1.12. After installing Juliaup, open a regular terminal:
 
 - Windows: open PowerShell or Windows Terminal.
 - macOS: open Terminal.
 - Linux: open your usual terminal.
+
+Then install Julia 1.12:
+
+```bash
+juliaup add 1.12
+juliaup default 1.12
+```
+
+The first command installs Julia 1.12, while the second command selects the
+now installed 1.12 channel as the default.
 
 Start Julia with the number of physical CPU cores you found. For example, for a CPU with 6 cores:
 
