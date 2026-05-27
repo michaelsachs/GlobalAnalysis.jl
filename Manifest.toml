@@ -957,7 +957,7 @@ version = "1.4.0"
 deps = ["CSV", "Catalyst", "CommonSolve", "DSP", "DelimitedFiles", "Distributions", "Downloads", "FiniteDiff", "Glob", "IJulia", "Interpolations", "Latexify", "LinearAlgebra", "Metaheuristics", "MonteCarloMeasurements", "NLopt", "NaNStatistics", "OrdinaryDiffEqRosenbrock", "OrdinaryDiffEqTsit5", "Pkg", "Plots", "SciMLBase", "SciMLStructures", "Statistics", "StructArrays", "TOML", "Tables"]
 path = "."
 uuid = "0697fe54-52cc-445b-8059-c053b5e91f02"
-version = "0.2.2"
+version = "0.2.3"
 
 [[deps.Graphite2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]

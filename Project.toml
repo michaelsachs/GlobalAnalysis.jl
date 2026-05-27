@@ -1,7 +1,7 @@
 name = "GlobalAnalysis"
 uuid = "0697fe54-52cc-445b-8059-c053b5e91f02"
 authors = ["Michael Sachs"]
-version = "0.2.2"
+version = "0.2.3"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
