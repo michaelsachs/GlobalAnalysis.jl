@@ -150,52 +150,6 @@ function alignPackageCompilerHelperCpuTarget!(kind::AbstractString, cpu_target::
 end
 
 """
-    macVscaleFilteredTrace(kind, cpu_target, workload)
-
-Manually traces the macOS/AArch64 release workload and filters
-HostCPUFeatures.vscale precompile statements. Returns a filtered trace file, or
-`nothing` when the normal PackageCompiler workload path should be used.
-
-Remove this whole function and its call site once HostCPUFeatures, Julia, or
-PackageCompiler no longer traces `vscale()` into Apple Silicon sysimages.
-"""
-function macVscaleFilteredTrace(
-    kind::AbstractString,
-    cpu_target::AbstractString,
-    workload::AbstractString,
-)
-    gaPortableReleaseBuild(kind, cpu_target) || return nothing
-    (Sys.isapple() && Sys.ARCH === :aarch64) || return nothing
-
-    trace_dir = mktempdir()
-    raw_trace = joinpath(trace_dir, "precompile_raw.jl")
-    filtered_trace = joinpath(trace_dir, "precompile_filtered.jl")
-    trace_cmd = `$(PackageCompiler.get_julia_cmd()) --project=$GA_REPO_ROOT --trace-compile=$raw_trace $workload`
-
-    println("Tracing macOS AArch64 workload for filtered precompile statements: ", workload)
-    run(trace_cmd)
-
-    statements = isfile(raw_trace) ? readlines(raw_trace) : String[]
-    filtered = filter(statement -> !occursin("HostCPUFeatures.vscale", statement), statements)
-    removed = length(statements) - length(filtered)
-
-    open(filtered_trace, "w") do io
-        for statement in filtered
-            println(io, statement)
-        end
-    end
-
-    println(
-        "Filtered ",
-        removed,
-        " HostCPUFeatures.vscale precompile statement(s) from ",
-        raw_trace,
-    )
-
-    return filtered_trace
-end
-
-"""
     withHostCpuFeaturesPreferences(kind, cpu_target) do
         ...
     end
@@ -243,6 +197,89 @@ function withHostCpuFeaturesPreferences(f::Function, kind::AbstractString, cpu_t
     end
 end
 
+function hostCpuFeaturesAarch64Source()
+    previous_load_path = copy(LOAD_PATH)
+    package_file = try
+        pushfirst!(LOAD_PATH, GA_REPO_ROOT)
+        Base.locate_package(Base.PkgId(Base.UUID(HOST_CPU_FEATURES_UUID), HOST_CPU_FEATURES_PREFS))
+    finally
+        empty!(LOAD_PATH)
+        append!(LOAD_PATH, previous_load_path)
+    end
+
+    package_file === nothing && return nothing
+    return joinpath(dirname(package_file), "cpu_info_aarch64.jl")
+end
+
+function patchHostCpuFeaturesAarch64Source!(source::AbstractString)
+    previous_source = read(source, String)
+    patched_source = replace(
+        previous_source,
+        """@noinline vscale() = ccall("llvm.vscale.i64", llvmcall, Int64, ())""" =>
+            """@noinline vscale() = one(Int64)""",
+        """@noinline vscale() = ccall("llvm.vscale.i32", llvmcall, Int32, ())""" =>
+            """@noinline vscale() = one(Int32)""",
+    )
+
+    patched_source == previous_source &&
+        error("HostCPUFeatures AArch64 vscale source did not match expected text: $source")
+
+    write(source, patched_source)
+    return nothing
+end
+
+"""
+    withMacHostCpuFeaturesVscaleSourcePatch(kind, cpu_target) do
+        ...
+    end
+
+Temporarily rewrites HostCPUFeatures.vscale on macOS/AArch64 portable release
+builds. The method is unused for Apple Silicon without SVE, but its unconditional
+`llvm.vscale` definition is compiled while PackageCompiler writes the sysimage
+object and LLVM aborts for the `apple-m1` target.
+"""
+function withMacHostCpuFeaturesVscaleSourcePatch(
+    f::Function,
+    kind::AbstractString,
+    cpu_target::AbstractString,
+)
+    gaPortableReleaseBuild(kind, cpu_target) || return f()
+    (Sys.isapple() && Sys.ARCH === :aarch64) || return f()
+
+    source = hostCpuFeaturesAarch64Source()
+    source === nothing && error("Could not locate HostCPUFeatures AArch64 source")
+
+    package_dir = dirname(dirname(source))
+    patched_package_dir = joinpath(GA_BUILD_DIR, "HostCPUFeatures-vscale-patch")
+    patched_source = joinpath(patched_package_dir, "src", "cpu_info_aarch64.jl")
+    manifest_path = joinpath(GA_REPO_ROOT, "Manifest.toml")
+    previous_manifest = read(manifest_path, String)
+
+    try
+        rm(patched_package_dir; recursive=true, force=true)
+        cp(package_dir, patched_package_dir)
+        chmod(patched_source, 0o644)
+        patchHostCpuFeaturesAarch64Source!(patched_source)
+
+        manifest = TOML.parse(previous_manifest)
+        host_entries = manifest["deps"][HOST_CPU_FEATURES_PREFS]
+        length(host_entries) == 1 ||
+            error("Expected one HostCPUFeatures manifest entry, found $(length(host_entries))")
+        host_entry = only(host_entries)
+        delete!(host_entry, "git-tree-sha1")
+        host_entry["path"] = patched_package_dir
+        open(manifest_path, "w") do io
+            TOML.print(io, manifest; sorted=true)
+        end
+
+        println("Using patched HostCPUFeatures source for macOS AArch64 sysimage: ", patched_package_dir)
+        return f()
+    finally
+        write(manifest_path, previous_manifest)
+        rm(patched_package_dir; recursive=true, force=true)
+    end
+end
+
 kind = gaKindFromArgs()
 mkpath(GA_BUILD_DIR)
 
@@ -266,20 +303,17 @@ println("Build args: ", isempty(build_args.exec) ? "(default)" : join(build_args
 println("Packages:   ", join(string.(packages), ", "))
 
 withHostCpuFeaturesPreferences(kind, cpu_target) do
-    filtered_trace = macVscaleFilteredTrace(kind, cpu_target, workload)
-    precompile_execution_files = filtered_trace === nothing ? workload : String[]
-    precompile_statement_files = filtered_trace === nothing ? String[] : [filtered_trace]
-
-    create_sysimage(
-        packages;
-        project=GA_REPO_ROOT,
-        sysimage_path=sysimage_path,
-        precompile_execution_file=precompile_execution_files,
-        precompile_statements_file=precompile_statement_files,
-        cpu_target=cpu_target,
-        sysimage_build_args=build_args,
-        incremental=true,
-    )
+    withMacHostCpuFeaturesVscaleSourcePatch(kind, cpu_target) do
+        create_sysimage(
+            packages;
+            project=GA_REPO_ROOT,
+            sysimage_path=sysimage_path,
+            precompile_execution_file=workload,
+            cpu_target=cpu_target,
+            sysimage_build_args=build_args,
+            incremental=true,
+        )
+    end
 end
 
 println("Wrote sysimage: ", sysimage_path)

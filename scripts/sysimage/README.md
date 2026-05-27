@@ -42,9 +42,9 @@ julia --project=scripts/sysimage scripts/sysimage/compress.jl release
 
 On Apple Silicon release builders, use `apple-m1` instead of `generic`. The
 build pins PackageCompiler helper processes and HostCPUFeatures preferences to
-the same CPU target, and filters HostCPUFeatures `vscale` trace statements on
-AArch64, so the final sysimage compiler does not lower host-only CPU feature
-methods.
+the same CPU target. It also temporarily uses a patched local copy of
+HostCPUFeatures while compiling the sysimage so LLVM does not lower the package's
+unused AArch64 `llvm.vscale` method for Apple Silicon targets.
 
 The compression step writes a `.tar.gz` file. GitHub Actions uploads that
 compressed sysimg as a workflow artifact and, for published GitHub releases,
